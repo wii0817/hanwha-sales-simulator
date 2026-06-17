@@ -1994,6 +1994,117 @@
             .input-box, .month-day-card { padding: 8px; }
         }
 
+
+        /* 그래프 폭 기준 통합 레이아웃: 스마트폰 가로 화면에서는 모든 탭을 그래프 카드 폭에 맞춤 */
+        @media (max-width: 932px) and (orientation: landscape) {
+            :root { --mobile-graph-page-width: 760px; }
+            html {
+                overflow-x: auto !important;
+                -webkit-text-size-adjust: 100%;
+            }
+            body {
+                min-width: var(--mobile-graph-page-width) !important;
+                overflow-x: auto !important;
+                align-items: center;
+            }
+            header,
+            main,
+            footer {
+                width: var(--mobile-graph-page-width) !important;
+                max-width: var(--mobile-graph-page-width) !important;
+                min-width: var(--mobile-graph-page-width) !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
+            }
+            header {
+                display: grid !important;
+                grid-template-columns: 180px minmax(0, 1fr) auto;
+                align-items: center;
+                position: sticky;
+                left: 0;
+                right: auto;
+            }
+            .tab-container {
+                width: 100% !important;
+                max-width: 100% !important;
+                justify-content: center;
+            }
+            .tab-content,
+            .filter-bar,
+            .briefing-box,
+            .metric-grid,
+            .content-grid,
+            .card-main,
+            .input-container-card,
+            .archive-actions-card,
+            .table-card,
+            .month-section-card,
+            .daily-inline-input-card {
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+            }
+            .content-grid {
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+            .metric-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+            .chart-container {
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+            }
+            .chart-svg {
+                width: 100% !important;
+                min-width: 0 !important;
+                height: auto !important;
+            }
+            .chart-footer,
+            .input-summary-bar,
+            .action-bar-inputs,
+            .target-setter,
+            .monthly-bulk-area {
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box;
+            }
+            .timeline-list {
+                max-height: none !important;
+            }
+            .timeline-item {
+                width: 100% !important;
+                box-sizing: border-box;
+            }
+            .grid-inputs {
+                grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            }
+            .month-days-grid {
+                grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            }
+            .month-control-grid,
+            .archive-form {
+                grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            }
+            .archive-hourly-grid {
+                grid-template-columns: repeat(9, minmax(0, 1fr)) !important;
+            }
+            .table-responsive {
+                width: 100% !important;
+                overflow-x: auto !important;
+            }
+            table {
+                min-width: 100% !important;
+            }
+        }
+
+        @media (max-width: 700px) and (orientation: landscape) {
+            :root { --mobile-graph-page-width: 700px; }
+            .month-days-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+            .archive-hourly-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+        }
+
     </style>
 </head>
 <body>
