@@ -2067,6 +2067,10 @@
         <p style="opacity: 0.7; margin-top: 4px;">* 내부망 전용 오프라인 기기로 포맷, 브라우저 캐시 삭제 시 데이터가 소실될 수 있으므로 매주 주기적으로 <strong>[DB 내보내기]</strong> 백업을 하시기 바랍니다.</p>
     </footer>
 
+    <!-- Firebase Realtime Database SDK: GitHub Pages 단일 HTML에서 바로 사용 -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
     <!-- ==========================================
          5. 완벽 오프라인 통계 분석 및 화면 렌더링 JS 엔진
          ========================================== -->
@@ -2108,6 +2112,153 @@
         let editingRowId = null; // 실시간 인라인 편집 타겟 행 ID 홀더
 
         let modalCallback = null;
+
+        // Firebase Realtime Database 공유 설정
+        // GitHub Pages는 화면만 배포하고, 입력 데이터는 아래 Firebase DB로 실시간 공유됩니다.
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyDq2XY8euGd57JV4oK3ahMLVZr8HT8pjmc",
+            authDomain: "hanwha-sales-simulator.firebaseapp.com",
+            databaseURL: "https://hanwha-sales-simulator-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "hanwha-sales-simulator",
+            storageBucket: "hanwha-sales-simulator.firebasestorage.app",
+            messagingSenderId: "392542954422",
+            appId: "1:392542954422:web:8fbdcb23ec678604b0d717",
+            measurementId: "G-T0HJP9N3RL"
+        };
+
+        const FIREBASE_DB_PATH = 'hanwhaSalesSimulator/sharedState';
+        let firebaseDatabaseRef = null;
+        let firebaseSyncReady = false;
+        let firebaseApplyingRemote = false;
+        let firebaseSaveTimer = null;
+        let firebaseLastSerialized = '';
+
+        function getSharedStatePayload() {
+            return {
+                version: 'firebase-rtdb-v1',
+                updatedAt: new Date().toISOString(),
+                historicalData,
+                todayData,
+                dailyTarget,
+                currentAnalysisMode,
+                monthlyHistoricalData: (typeof monthlyHistoricalData !== 'undefined') ? monthlyHistoricalData : [],
+                currentMonthData: (typeof currentMonthData !== 'undefined') ? currentMonthData : {},
+                monthlyTarget: (typeof monthlyTarget !== 'undefined') ? monthlyTarget : 350000,
+                monthlyBusinessDays: (typeof monthlyBusinessDays !== 'undefined') ? monthlyBusinessDays : 22,
+                currentMonthId: (typeof currentMonthId !== 'undefined') ? currentMonthId : '',
+                monthlyFridayDayNumbersText: (typeof monthlyFridayDayNumbersText !== 'undefined') ? monthlyFridayDayNumbersText : '',
+                monthlyBusinessDateMap: (typeof monthlyBusinessDateMap !== 'undefined') ? monthlyBusinessDateMap : {},
+                monthlyHolidayDatesText: (typeof monthlyHolidayDatesText !== 'undefined') ? monthlyHolidayDatesText : '',
+                monthlyArchiveHolidayDatesText: (typeof monthlyArchiveHolidayDatesText !== 'undefined') ? monthlyArchiveHolidayDatesText : ''
+            };
+        }
+
+        function scheduleFirebaseSave(reason = 'update') {
+            if (!firebaseSyncReady || !firebaseDatabaseRef || firebaseApplyingRemote) return;
+            clearTimeout(firebaseSaveTimer);
+            firebaseSaveTimer = setTimeout(() => {
+                const payload = getSharedStatePayload();
+                const serialized = JSON.stringify(payload);
+                if (serialized === firebaseLastSerialized) return;
+                firebaseLastSerialized = serialized;
+                firebaseDatabaseRef.set(payload).catch(err => {
+                    console.error('Firebase 저장 실패:', err);
+                    showToast('Firebase 실시간 저장에 실패했습니다. DB 규칙/네트워크를 확인해주세요.', 'error');
+                });
+            }, 450);
+        }
+
+        function applySharedStatePayload(data) {
+            if (!data || typeof data !== 'object') return;
+            firebaseApplyingRemote = true;
+            try {
+                if (Array.isArray(data.historicalData)) historicalData = data.historicalData;
+                if (data.todayData && typeof data.todayData === 'object') todayData = { ...SLOT_KEYS.reduce((acc, k) => ({ ...acc, [k]: '' }), {}), ...data.todayData };
+                if (data.dailyTarget) dailyTarget = Number(data.dailyTarget) || 22000;
+                if (data.currentAnalysisMode) currentAnalysisMode = data.currentAnalysisMode;
+
+                if (typeof monthlyHistoricalData !== 'undefined' && Array.isArray(data.monthlyHistoricalData)) monthlyHistoricalData = data.monthlyHistoricalData;
+                if (typeof currentMonthData !== 'undefined' && data.currentMonthData && typeof data.currentMonthData === 'object') currentMonthData = { ...emptyMonthlyData(), ...data.currentMonthData };
+                if (typeof monthlyTarget !== 'undefined' && data.monthlyTarget) monthlyTarget = Number(data.monthlyTarget) || 350000;
+                if (typeof monthlyBusinessDays !== 'undefined' && data.monthlyBusinessDays) monthlyBusinessDays = clampMonthlyWorkdays ? clampMonthlyWorkdays(data.monthlyBusinessDays) : Number(data.monthlyBusinessDays);
+                if (typeof currentMonthId !== 'undefined' && data.currentMonthId) currentMonthId = data.currentMonthId;
+                if (typeof monthlyFridayDayNumbersText !== 'undefined') monthlyFridayDayNumbersText = data.monthlyFridayDayNumbersText || '';
+                if (typeof monthlyBusinessDateMap !== 'undefined') monthlyBusinessDateMap = data.monthlyBusinessDateMap || {};
+                if (typeof monthlyHolidayDatesText !== 'undefined') monthlyHolidayDatesText = data.monthlyHolidayDatesText || '';
+                if (typeof monthlyArchiveHolidayDatesText !== 'undefined') monthlyArchiveHolidayDatesText = data.monthlyArchiveHolidayDatesText || '';
+
+                localStorage.setItem('hanwha_inbojang_historical_v4', JSON.stringify(historicalData));
+                localStorage.setItem('hanwha_inbojang_today_v4', JSON.stringify(todayData));
+                localStorage.setItem('hanwha_inbojang_target_v4', dailyTarget.toString());
+                localStorage.setItem('hanwha_inbojang_mode_v4', currentAnalysisMode);
+                if (typeof monthlyHistoricalData !== 'undefined') localStorage.setItem('hanwha_inbojang_monthly_historical_v1', JSON.stringify(monthlyHistoricalData));
+                if (typeof currentMonthData !== 'undefined') localStorage.setItem('hanwha_inbojang_current_month_data_v1', JSON.stringify(currentMonthData));
+                if (typeof monthlyTarget !== 'undefined') localStorage.setItem('hanwha_inbojang_monthly_target_v1', monthlyTarget.toString());
+                if (typeof monthlyBusinessDays !== 'undefined') localStorage.setItem('hanwha_inbojang_monthly_workdays_v1', monthlyBusinessDays.toString());
+                if (typeof currentMonthId !== 'undefined') localStorage.setItem('hanwha_inbojang_current_month_id_v1', currentMonthId);
+                if (typeof monthlyFridayDayNumbersText !== 'undefined') localStorage.setItem('hanwha_inbojang_monthly_friday_day_numbers_v1', monthlyFridayDayNumbersText);
+                if (typeof monthlyBusinessDateMap !== 'undefined') localStorage.setItem('hanwha_inbojang_monthly_business_date_map_v1', JSON.stringify(monthlyBusinessDateMap || {}));
+                if (typeof monthlyHolidayDatesText !== 'undefined') localStorage.setItem('hanwha_inbojang_monthly_holidays_v1', monthlyHolidayDatesText || '');
+
+                const targetEl = document.getElementById('input-target-main');
+                if (targetEl) targetEl.value = formatNumber(dailyTarget);
+                const modeEl = document.getElementById('mode-selector');
+                if (modeEl) modeEl.value = currentAnalysisMode;
+                const badgeEl = document.getElementById('ai-mode-badge');
+                if (badgeEl) {
+                    if(currentAnalysisMode === 'weekday') badgeEl.innerText = "AI 평일가중";
+                    else if(currentAnalysisMode === 'friday') badgeEl.innerText = "AI 금욜가중";
+                    else if(currentAnalysisMode === 'closing') badgeEl.innerText = "AI 마감가중";
+                }
+                const monthIdEl = document.getElementById('month-current-id');
+                const workdaysEl = document.getElementById('month-workdays-input');
+                const monthTargetEl = document.getElementById('month-target-input');
+                const holidayInput = document.getElementById('month-holidays-input');
+                if (monthIdEl && typeof currentMonthId !== 'undefined') monthIdEl.value = currentMonthId;
+                if (workdaysEl && typeof monthlyBusinessDays !== 'undefined') workdaysEl.value = monthlyBusinessDays;
+                if (monthTargetEl && typeof monthlyTarget !== 'undefined') monthTargetEl.value = formatNumber(monthlyTarget);
+                if (holidayInput && typeof monthlyHolidayDatesText !== 'undefined') holidayInput.value = monthlyHolidayDatesText;
+
+                buildInputFormElements();
+                if (typeof updateMonthlySpecialSettingsUI === 'function') updateMonthlySpecialSettingsUI();
+                if (typeof buildMonthlyInputElements === 'function') buildMonthlyInputElements();
+                if (typeof buildMonthlyArchiveInputElements === 'function') buildMonthlyArchiveInputElements();
+                runAnalyticsAndRender();
+                if (typeof runMonthlyAnalyticsAndRender === 'function') runMonthlyAnalyticsAndRender();
+                if (typeof updateMonthlyHolidayPreviews === 'function') updateMonthlyHolidayPreviews();
+            } finally {
+                firebaseApplyingRemote = false;
+            }
+        }
+
+        function initFirebaseRealtimeSync() {
+            if (!window.firebase || !window.firebase.database) {
+                showToast('Firebase SDK 로드 실패: 인터넷 연결 또는 차단 여부를 확인해주세요.', 'error');
+                return;
+            }
+            try {
+                if (!firebase.apps || firebase.apps.length === 0) firebase.initializeApp(FIREBASE_CONFIG);
+                firebaseDatabaseRef = firebase.database().ref(FIREBASE_DB_PATH);
+                firebaseDatabaseRef.on('value', snapshot => {
+                    const data = snapshot.val();
+                    if (data) {
+                        firebaseLastSerialized = JSON.stringify(data);
+                        applySharedStatePayload(data);
+                        firebaseSyncReady = true;
+                    } else {
+                        firebaseSyncReady = true;
+                        scheduleFirebaseSave('initial-publish');
+                    }
+                }, err => {
+                    console.error('Firebase 읽기 실패:', err);
+                    showToast('Firebase 실시간 읽기에 실패했습니다. DB 규칙을 확인해주세요.', 'error');
+                });
+                showToast('Firebase 실시간 공유가 연결되었습니다.', 'success');
+            } catch (err) {
+                console.error('Firebase 초기화 실패:', err);
+                showToast('Firebase 초기화에 실패했습니다. 설정값을 확인해주세요.', 'error');
+            }
+        }
 
         function showConfirm(title, message, onConfirm) {
             document.getElementById('modal-title').innerText = title;
@@ -2215,6 +2366,7 @@
             localStorage.setItem('hanwha_inbojang_today_v4', JSON.stringify(todayData));
             localStorage.setItem('hanwha_inbojang_target_v4', dailyTarget.toString());
             localStorage.setItem('hanwha_inbojang_mode_v4', currentAnalysisMode);
+            scheduleFirebaseSave('daily-storage');
         }
 
         // 🆕 분석 가중치 모드 변경 핸들러
@@ -3716,6 +3868,7 @@
             localStorage.setItem('hanwha_inbojang_current_month_id_v1', currentMonthId);
             localStorage.setItem('hanwha_inbojang_monthly_friday_day_numbers_v1', monthlyFridayDayNumbersText);
             localStorage.setItem('hanwha_inbojang_monthly_business_date_map_v1', JSON.stringify(monthlyBusinessDateMap || {}));
+            scheduleFirebaseSave('monthly-storage');
         }
 
         function handleMonthlyMonthIdChange(value) {
@@ -4964,6 +5117,7 @@
         saveMonthlyToStorage = function() {
             __holidayOriginalSaveMonthlyToStorage();
             localStorage.setItem('hanwha_inbojang_monthly_holidays_v1', monthlyHolidayDatesText || '');
+            scheduleFirebaseSave('monthly-holidays');
         };
 
         const __holidayOriginalHandleMonthlyMonthIdChange = handleMonthlyMonthIdChange;
@@ -5466,6 +5620,7 @@
         window.onload = function() {
             if (typeof __holidayOriginalOnload === 'function') __holidayOriginalOnload();
             initMonthlyHolidayModule();
+            initFirebaseRealtimeSync();
         };
 
     </script>
