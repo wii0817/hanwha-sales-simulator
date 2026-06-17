@@ -2105,7 +2105,461 @@
             .archive-hourly-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
         }
 
-    </style>
+    
+
+        /* 최종 모바일 고정: 가로 스크롤을 완전히 막고 모든 요소를 화면 폭 안에 재배치 */
+        @media (max-width: 932px) {
+            html, body {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+            }
+            body { align-items: stretch !important; }
+            *, *::before, *::after {
+                max-width: 100%;
+                box-sizing: border-box;
+            }
+            header, main, footer,
+            .tab-content, .filter-bar, .briefing-box, .metric-grid, .content-grid,
+            .card-main, .card-metric, .input-container-card, .archive-actions-card,
+            .table-card, .month-section-card, .daily-inline-input-card {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+            header {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) !important;
+                position: sticky;
+                left: auto !important;
+                right: auto !important;
+            }
+            .logo-section, .util-container, .tab-container {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+            }
+            .tab-container {
+                overflow-x: hidden !important;
+                display: grid !important;
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                flex-wrap: nowrap !important;
+            }
+            .tab-btn {
+                min-width: 0 !important;
+                width: 100% !important;
+                white-space: normal !important;
+                padding-left: 4px !important;
+                padding-right: 4px !important;
+            }
+            .util-container {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 38px !important;
+            }
+            .btn-util { min-width: 0 !important; white-space: normal !important; }
+            main { padding-left: 8px !important; padding-right: 8px !important; }
+            .metric-grid, .month-metric-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 6px !important;
+            }
+            .card-metric { padding: 10px !important; }
+            .metric-num { font-size: clamp(16px, 4.2vw, 22px) !important; }
+            .metric-label, .metric-desc, .metric-unit { font-size: clamp(8px, 2.2vw, 11px) !important; }
+            .content-grid {
+                grid-template-columns: minmax(0, 1fr) !important;
+                gap: 8px !important;
+            }
+            .card-main, .input-container-card, .archive-actions-card, .table-card, .month-section-card {
+                padding: 10px !important;
+            }
+            .chart-container, .month-chart-container {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+            .chart-svg, #chart-svg, #month-chart-svg {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                display: block !important;
+            }
+            .chart-footer {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) !important;
+                gap: 6px !important;
+                font-size: 8.5px !important;
+                line-height: 1.3 !important;
+            }
+            .chart-footer > div { justify-content: flex-start !important; flex-wrap: wrap !important; }
+            .timeline-item {
+                display: grid !important;
+                grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr) !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                gap: 6px !important;
+                padding: 8px !important;
+            }
+            .timeline-item > div:last-child {
+                min-width: 0 !important;
+                width: 100% !important;
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+                gap: 6px !important;
+            }
+            .time-label-area, .value-area, .value-main, .value-sub, .time-label {
+                min-width: 0 !important;
+                white-space: normal !important;
+                word-break: keep-all !important;
+                overflow-wrap: anywhere !important;
+            }
+            .grid-inputs, .month-days-grid, .archive-hourly-grid, .month-control-grid, .archive-form,
+            .input-summary-bar, .action-bar-inputs, .target-setter, .monthly-bulk-area {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+            }
+            .grid-inputs { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+            .month-days-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+            .archive-hourly-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+            .month-control-grid, .archive-form { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+            .input-box, .month-day-card, .archive-hourly-item, .month-control-field, .month-special-preview {
+                min-width: 0 !important;
+                padding: 8px !important;
+            }
+            .input-field, .month-day-input, .archive-hourly-input, .form-date-input, .form-select-input, .input-inline,
+            .monthly-bulk-textarea, .holiday-input, input, select, textarea {
+                min-width: 0 !important;
+                max-width: 100% !important;
+            }
+            .input-summary-bar, .action-bar-inputs, .target-setter, .monthly-bulk-area {
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 6px !important;
+                align-items: stretch !important;
+            }
+            .table-responsive {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+            }
+            table {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                table-layout: fixed !important;
+                border-collapse: collapse !important;
+                font-size: 8.5px !important;
+            }
+            th, td {
+                white-space: normal !important;
+                word-break: keep-all !important;
+                overflow-wrap: anywhere !important;
+                padding: 5px 3px !important;
+                line-height: 1.25 !important;
+            }
+            .table-edit-input, .table-edit-select, .table-edit-date {
+                width: 100% !important;
+                min-width: 0 !important;
+                font-size: 8.5px !important;
+                padding: 3px !important;
+            }
+            .logo-image { max-width: min(210px, 70vw) !important; height: auto !important; }
+        }
+
+        @media (max-width: 700px) {
+            .metric-grid, .month-metric-grid { grid-template-columns: 1fr !important; }
+            .grid-inputs { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+            .month-days-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+            .archive-hourly-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+            .month-control-grid, .archive-form,
+            .input-summary-bar, .action-bar-inputs, .target-setter, .monthly-bulk-area {
+                grid-template-columns: 1fr !important;
+            }
+            .timeline-item,
+            .timeline-item > div:last-child {
+                grid-template-columns: 1fr !important;
+            }
+        }
+
+    
+
+        /* 모바일 좁은 화면 겹침 방지 최종 패치: 월마감/아카이브 그리드를 카드형으로 재배치 */
+        @media (max-width: 932px) {
+            /* 너무 많은 칸을 한 줄에 억지로 넣지 않고, 입력 카드 자체를 안정적으로 축소 */
+            .month-days-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 8px !important;
+            }
+            .month-day-box,
+            .month-day-card {
+                min-width: 0 !important;
+                width: 100% !important;
+                padding: 8px !important;
+                gap: 6px !important;
+                overflow: hidden !important;
+            }
+            .month-day-title-row {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) !important;
+                gap: 5px !important;
+                align-items: stretch !important;
+            }
+            .month-day-title-text,
+            .month-date-label,
+            .special-day-chip,
+            .month-day-help {
+                white-space: normal !important;
+                word-break: keep-all !important;
+                overflow-wrap: anywhere !important;
+            }
+            .month-date-input {
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                flex-shrink: 1 !important;
+                font-size: 9px !important;
+                padding-left: 3px !important;
+                padding-right: 3px !important;
+            }
+            .month-day-box input:not(.month-date-input),
+            .month-day-card input:not(.month-date-input),
+            .month-day-input {
+                width: 100% !important;
+                min-width: 0 !important;
+                font-size: 13px !important;
+            }
+
+            /* 월마감 설정/월별 아카이브 등록 영역은 1열 기준으로 안정화 */
+            .month-control-grid,
+            .month-form-compact,
+            .month-form-compact.with-holidays,
+            .archive-form,
+            .monthly-bulk-area,
+            .input-summary-bar,
+            .action-bar-inputs,
+            .target-setter {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) !important;
+                gap: 8px !important;
+                align-items: stretch !important;
+            }
+            .month-control-field {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) !important;
+                gap: 4px !important;
+                width: 100% !important;
+            }
+            .month-control-field input,
+            .month-special-days-input,
+            .month-special-mini-input,
+            .holiday-input,
+            .form-date-input,
+            .form-select-input,
+            .monthly-bulk-textarea,
+            .btn-submit-history,
+            .btn-clear,
+            .btn-commit,
+            .month-date-auto-btn {
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+            }
+            .archive-hourly-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 6px !important;
+            }
+            .archive-hourly-item,
+            .archive-hourly-input {
+                min-width: 0 !important;
+                width: 100% !important;
+            }
+        }
+
+        @media (max-width: 640px) {
+            /* 세로/좁은 모바일에서는 카드 한 줄 1개로 완전히 겹침 제거 */
+            .month-days-grid {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+            .grid-inputs,
+            .archive-hourly-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+            .metric-grid,
+            .month-metric-grid {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            /* 아카이브 표는 표 형태를 유지하지 않고 모바일 카드처럼 세로로 접어 겹침 방지 */
+            .table-responsive {
+                overflow-x: hidden !important;
+            }
+            .table-card table,
+            .table-card thead,
+            .table-card tbody,
+            .table-card tr,
+            .table-card th,
+            .table-card td {
+                display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            .table-card thead {
+                display: none !important;
+            }
+            .table-card tr {
+                margin: 8px 0 !important;
+                padding: 8px !important;
+                border: 1px solid var(--border-color) !important;
+                border-radius: 14px !important;
+                background: #ffffff !important;
+                box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
+            }
+            .table-card td {
+                border-bottom: 1px dashed var(--border-color) !important;
+                padding: 6px 4px !important;
+                text-align: left !important;
+                white-space: normal !important;
+                word-break: keep-all !important;
+                overflow-wrap: anywhere !important;
+                font-size: 10px !important;
+                line-height: 1.35 !important;
+            }
+            .table-card td:last-child {
+                border-bottom: none !important;
+            }
+            .table-card td[style*="display: flex"] {
+                display: flex !important;
+                height: auto !important;
+                justify-content: flex-start !important;
+                flex-wrap: wrap !important;
+            }
+            .table-edit-input,
+            .table-edit-select,
+            .table-edit-date {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+        }
+
+        @media (max-width: 932px) and (orientation: landscape) {
+            /* 모바일 가로는 2열까지만 허용해 압축과 가독성 균형 유지 */
+            .month-days-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+            .archive-hourly-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+            .month-form-compact,
+            .month-form-compact.with-holidays,
+            .archive-form {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+            .monthly-bulk-area,
+            .input-summary-bar,
+            .action-bar-inputs {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+        }
+
+
+        /* 월마감 예측 모바일 겹침 방지: 그래프/월진도 가이드/입력 영역을 명확히 분리 */
+        #tab-month .monthly-forecast-layout {
+            align-items: start;
+            margin-bottom: 24px;
+            clear: both;
+        }
+        #tab-month .month-guide-card {
+            position: relative;
+            z-index: 1;
+            overflow: hidden;
+        }
+        #tab-month #monthly-timeline-list-container {
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 4px;
+            margin-bottom: 0;
+        }
+        #tab-month .month-section-card {
+            position: relative;
+            z-index: 2;
+            clear: both;
+            margin-top: 24px !important;
+        }
+
+        @media (max-width: 932px) {
+            #tab-month .monthly-forecast-layout {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) !important;
+                gap: 12px !important;
+                margin-bottom: 18px !important;
+            }
+            #tab-month .month-chart-card,
+            #tab-month .month-guide-card,
+            #tab-month .month-section-card {
+                display: block !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+            }
+            #tab-month .month-guide-card {
+                margin-bottom: 0 !important;
+            }
+            #tab-month #monthly-timeline-list-container {
+                max-height: 260px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 6px !important;
+            }
+            #tab-month .month-section-card {
+                margin-top: 16px !important;
+                border-top: 3px solid rgba(243, 115, 33, 0.16) !important;
+                box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05) !important;
+            }
+        }
+
+        @media (max-width: 640px) {
+            #tab-month #monthly-timeline-list-container {
+                max-height: 220px !important;
+            }
+            #tab-month .month-section-card {
+                margin-top: 14px !important;
+            }
+            #tab-month .month-section-card::before {
+                content: '이번달 보장성 실적 기입';
+                display: block;
+                margin: -2px 0 10px 0;
+                padding: 7px 10px;
+                border-radius: 10px;
+                background: rgba(243, 115, 33, 0.06);
+                color: var(--hanwha-orange);
+                font-size: 11px;
+                font-weight: 900;
+                text-align: center;
+            }
+        }
+
+        @media (max-width: 932px) and (orientation: landscape) {
+            #tab-month .monthly-forecast-layout {
+                gap: 10px !important;
+                margin-bottom: 16px !important;
+            }
+            #tab-month #monthly-timeline-list-container {
+                max-height: 190px !important;
+            }
+            #tab-month .month-section-card {
+                margin-top: 14px !important;
+            }
+        }
+
+</style>
 </head>
 <body>
 
@@ -2455,8 +2909,8 @@
                 </div>
             </div>
 
-            <div class="content-grid">
-                <div class="card-main">
+            <div class="content-grid monthly-forecast-layout">
+                <div class="card-main month-chart-card">
                     <div class="card-header-row">
                         <div class="card-title-area">
                             <h3>보장성 월 누적 마감 곡선 시뮬레이션</h3>
@@ -2477,7 +2931,7 @@
                     </div>
                 </div>
 
-                <div class="card-main">
+                <div class="card-main month-guide-card">
                     <div>
                         <div class="card-title-area" style="margin-bottom: 16px;">
                             <h3>영업일별 월진도 가이드</h3>
