@@ -1905,6 +1905,95 @@
             .timeline-list { max-height: none; }
         }
 
+
+        /* 스마트폰 가로 화면 재보정: 그래프 아래 영역까지 화면 폭에 맞게 압축 */
+        @media (max-width: 932px) and (orientation: landscape) {
+            html, body { width: 100%; overflow-x: hidden; }
+            main { width: 100%; overflow-x: hidden; }
+            .tab-content, .card-main, .input-container-card, .archive-actions-card, .table-card,
+            .briefing-box, .filter-bar, .content-grid, .month-section-card { min-width: 0; max-width: 100%; }
+
+            /* 그래프 카드가 아래쪽 요소를 밀어내지 않도록 SVG 최소폭 제거 */
+            .chart-container {
+                width: 100%;
+                max-width: 100%;
+                overflow-x: hidden;
+                max-height: none;
+                margin: 0;
+                padding: 0;
+            }
+            .chart-svg {
+                width: 100% !important;
+                min-width: 0 !important;
+                height: auto;
+                display: block;
+            }
+            .chart-footer {
+                margin-top: 8px;
+                padding-top: 8px;
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 8px;
+                align-items: start;
+                font-size: 9px;
+                line-height: 1.35;
+            }
+            .chart-footer > span { min-width: 0; white-space: normal; word-break: keep-all; }
+            .chart-footer > div { flex-wrap: wrap; gap: 6px !important; justify-content: flex-end; }
+
+            /* 그래프 아래 입력/가이드 카드도 가로폭 안에서 줄바꿈 */
+            .timeline-item,
+            .month-day-card,
+            .input-box,
+            .month-control-field,
+            .month-special-preview { min-width: 0; }
+            .timeline-item {
+                display: grid;
+                grid-template-columns: minmax(92px, .72fr) minmax(0, 1.28fr);
+                align-items: start;
+                column-gap: 8px;
+            }
+            .timeline-item > div:last-child {
+                min-width: 0;
+                width: 100%;
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) minmax(104px, .86fr);
+                gap: 8px !important;
+            }
+            .time-label-area { min-width: 0 !important; }
+            .time-label { white-space: normal; word-break: keep-all; }
+            .value-main, .value-sub { white-space: normal; }
+
+            .daily-inline-input-card,
+            .month-section-card { margin-top: 10px; }
+            .grid-inputs { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+            .month-days-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+            .archive-hourly-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+
+            .input-summary-bar,
+            .action-bar-inputs,
+            .monthly-bulk-area,
+            .target-setter {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+                align-items: stretch;
+            }
+            .btn-commit, .btn-clear, .month-date-auto-btn, .btn-submit-history { min-height: 38px; }
+
+            .table-responsive { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            table { min-width: 760px; }
+        }
+
+        /* 아주 낮은 높이의 스마트폰 가로 화면: 그래프 하단을 더 압축 */
+        @media (max-width: 932px) and (orientation: landscape) and (max-height: 430px) {
+            .chart-footer { grid-template-columns: 1fr; }
+            .timeline-list { max-height: 190px; }
+            .grid-inputs { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+            .month-days-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+            .input-box, .month-day-card { padding: 8px; }
+        }
+
     </style>
 </head>
 <body>
