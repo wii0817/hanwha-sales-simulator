@@ -3349,8 +3349,19 @@
                     });
                 }
                 if (typeof updateMonthlySpecialSettingsUI === 'function') updateMonthlySpecialSettingsUI();
-                if (typeof buildMonthlyInputElements === 'function') buildMonthlyInputElements();
-                if (typeof buildMonthlyArchiveInputElements === 'function') buildMonthlyArchiveInputElements();
+                const activeMonthlyInput = activeEl && activeEl.id && activeEl.id.startsWith('month-current-');
+                if (typeof buildMonthlyInputElements === 'function') {
+                    if (!activeMonthlyInput) {
+                        buildMonthlyInputElements();
+                    } else if (typeof MONTHLY_DAY_KEYS !== 'undefined') {
+                        MONTHLY_DAY_KEYS.forEach(k => {
+                            const el = document.getElementById(`month-current-${k}`);
+                            if (el && el !== activeEl) el.value = formatNumber(currentMonthData[k]);
+                        });
+                    }
+                }
+                const activeMonthlyArchiveInput = activeEl && activeEl.id && activeEl.id.startsWith('monthly-hist-');
+                if (typeof buildMonthlyArchiveInputElements === 'function' && !activeMonthlyArchiveInput) buildMonthlyArchiveInputElements();
                 runAnalyticsAndRender();
                 if (typeof runMonthlyAnalyticsAndRender === 'function') runMonthlyAnalyticsAndRender();
                 if (typeof updateMonthlyHolidayPreviews === 'function') updateMonthlyHolidayPreviews();
@@ -3418,6 +3429,52 @@
             if (str === null || str === undefined || str === '') return '';
             const clean = String(str).replace(/[^0-9]/g, '');
             return clean === '' ? '' : Number(clean);
+        }
+
+
+        // 예측 보수화 계수: 상승 예측은 조금 눌러서 과대 예측을 완화합니다.
+        const CONSERVATIVE_REMAINING_FACTOR = 0.90;
+        const CONSERVATIVE_UPSIDE_FACTOR = 0.85;
+        const CONSERVATIVE_NO_INPUT_FACTOR = 0.97;
+
+        function applyConservativeForecast(rawPredictedTotal, currentCumulative, averageTotalSales, isComplete) {
+            let predicted = Number(rawPredictedTotal) || 0;
+            const current = Math.max(Number(currentCumulative) || 0, 0);
+            const avg = Math.max(Number(averageTotalSales) || 0, 0);
+
+            if (isComplete) return Math.max(predicted, current);
+
+            if (current <= 0) {
+                return avg > 0 ? Math.max(avg * CONSERVATIVE_NO_INPUT_FACTOR, 0) : predicted;
+            }
+
+            // 남은 예상분을 90%만 반영해서 과대 추정을 완화합니다.
+            if (predicted > current) {
+                predicted = current + ((predicted - current) * CONSERVATIVE_REMAINING_FACTOR);
+            }
+
+            // 과거 평균보다 높게 산출된 부분은 85%만 반영합니다.
+            if (avg > 0 && predicted > avg) {
+                predicted = avg + ((predicted - avg) * CONSERVATIVE_UPSIDE_FACTOR);
+            }
+
+            return Math.max(predicted, current);
+        }
+
+        function formatDateLocal(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function getPreviousBusinessDate(baseDate = new Date()) {
+            const d = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+            d.setDate(d.getDate() - 1);
+            while (d.getDay() === 0 || d.getDay() === 6) {
+                d.setDate(d.getDate() - 1);
+            }
+            return formatDateLocal(d);
         }
 
         // 실시간 숫자 입력 제어 및 커서 흐트러짐 최소화 통합 도우미
@@ -3644,7 +3701,7 @@
                     }
                 });
 
-                let predictedTotal = todaySum || dailyTarget;
+                let predictedTotal = applyConservativeForecast(todaySum || dailyTarget, todaySum, dailyTarget, activeKeys.length === SLOT_KEYS.length);
                 const predictionTrendLine = {};
                 SLOT_KEYS.forEach(key => {
                     predictionTrendLine[key] = predictedTotal * avgSingleRatios[key];
@@ -3723,9 +3780,10 @@
                     predictedTotal = activeInputsSum / activeRatiosSum;
                     const enteredCount = activeKeys.length;
                     const totalCount = SLOT_KEYS.length;
+                    predictedTotal = applyConservativeForecast(predictedTotal, todaySum, averageTotalSales, enteredCount >= totalCount);
 
                     if (enteredCount < totalCount) {
-                        basisMsg = `현재 가중 패턴 모드 데이터 기준(${filteredHistory.length}일치 기조)을 연계 적용하여 오늘 예상 매출 마감을 역산 추정 중입니다.`;
+                        basisMsg = `현재 가중 패턴 모드 데이터 기준(${filteredHistory.length}일치 기조)을 연계 적용하고 남은 예상분을 보수적으로 조정하여 오늘 예상 매출 마감을 역산 추정 중입니다.`;
                     } else {
                         basisMsg = `오늘 모든 마감 매출이 기입되었습니다. 최종 일 마감 결과는 ${Math.round(predictedTotal).toLocaleString()}천원입니다.`;
                     }
@@ -3741,8 +3799,8 @@
                     }
                 });
             } else {
-                predictedTotal = averageTotalSales;
-                basisMsg = "오늘 기입된 구간 실적이 없어 아카이브 가중 모드 평균값으로 시뮬레이션 전개선을 그립니다.";
+                predictedTotal = applyConservativeForecast(averageTotalSales, 0, averageTotalSales, false);
+                basisMsg = "오늘 기입된 구간 실적이 없어 아카이브 가중 모드 평균값을 보수적으로 낮춰 시뮬레이션 전개선을 그립니다.";
                 SLOT_KEYS.forEach(key => {
                     predictionTrendLine[key] = avgCumulativeValues[key];
                 });
@@ -4259,13 +4317,14 @@
                 return;
             }
 
-            const todayStr = new Date().toISOString().split('T')[0];
+            const archiveDateStr = getPreviousBusinessDate(new Date());
             
-            const currentDay = new Date().getDay();
-            const defaultType = currentDay === 5 ? 'friday' : 'weekday';
+            const archiveDate = new Date(`${archiveDateStr}T00:00:00`);
+            const archiveDay = archiveDate.getDay();
+            const defaultType = archiveDay === 5 ? 'friday' : 'weekday';
             const defaultTypeLabel = defaultType === 'friday' ? '금요일' : '평일 (금제외)';
 
-            const confirmMsg = `오늘(${todayStr}) 누적 실적 ${stats.todaySum.toLocaleString()}천원을 과거 마감 실적 아카이브로 전송하십니까?\n\n이관 완료 시 오늘의 임시 입력창은 자동으로 지워지며 유형은 오늘 요일에 맞춰 기본적으로 '${defaultTypeLabel}'로 이관됩니다.`;
+            const confirmMsg = `입력된 누적 실적 ${stats.todaySum.toLocaleString()}천원을 전 영업일(${archiveDateStr}) 기준 과거 마감 실적 아카이브로 전송하십니까?\n\n이관 완료 시 오늘의 임시 입력창은 자동으로 지워지며 유형은 아카이브 날짜 기준 '${defaultTypeLabel}'로 이관됩니다.`;
             
             showConfirm('실적 아카이브 이관', confirmMsg, function() {
                 const hourlyFormatted = {};
@@ -4276,7 +4335,7 @@
 
                 const newRow = {
                     id: Date.now(),
-                    date: todayStr,
+                    date: archiveDateStr,
                     type: defaultType,
                     hourly: hourlyFormatted
                 };
@@ -4288,7 +4347,7 @@
                 buildInputFormElements(); 
                 runAnalyticsAndRender();
 
-                showToast('오늘 실적이 보존 아카이브 데이터셋으로 누적 처리되었습니다.');
+                showToast(`입력 실적이 전 영업일(${archiveDateStr}) 기준 아카이브로 누적 처리되었습니다.`);
             });
         }
 
@@ -5204,6 +5263,14 @@
                 currentMonthData[key] = numValue;
                 saveMonthlyToStorage();
                 runMonthlyAnalyticsAndRender();
+                requestAnimationFrame(() => {
+                    const el = document.getElementById(`month-current-${key}`);
+                    if (el && document.activeElement !== el) {
+                        el.focus({ preventScroll: true });
+                        const pos = el.value.length;
+                        try { el.setSelectionRange(pos, pos); } catch (e) {}
+                    }
+                });
             });
         }
 
@@ -5329,6 +5396,7 @@
             if (currentCumulative > 0 && currentAvgCumRatio > 0.0001) {
                 predictedTotal = currentCumulative / currentAvgCumRatio;
             }
+            predictedTotal = applyConservativeForecast(predictedTotal, currentCumulative, averageTotalSales, lastInputIndex >= monthlyBusinessDays);
 
             const predictedCumLine = {};
             const averageCumLine = {};
@@ -5367,11 +5435,11 @@
             const specialSummary = getMonthlySpecialDaySummary();
             let basisMsg = '';
             if (lastInputIndex === 0) {
-                basisMsg = `이번달 입력 실적이 없어 과거 ${processedRows.length}개월 평균 월마감 ${Math.round(averageTotalSales).toLocaleString()}천원을 기준선으로 표시합니다. AI 학습 보정값은 ${specialSummary.summaryText}입니다.`;
+                basisMsg = `이번달 입력 실적이 없어 과거 ${processedRows.length}개월 평균 월마감을 보수적으로 낮춘 ${Math.round(predictedTotal).toLocaleString()}천원을 기준선으로 표시합니다. AI 학습 보정값은 ${specialSummary.summaryText}입니다.`;
             } else {
                 const ratioPct = (currentAvgCumRatio * 100).toFixed(1);
                 const lastDateLabel = getMonthlyBusinessDateLabel(lastInputIndex);
-                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 아카이브에서 학습한 금요일/월마감 특수일 보정 누적비중 ${ratioPct}%를 역산해 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
+                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 아카이브에서 학습한 금요일/월마감 특수일 보정 누적비중 ${ratioPct}%를 역산한 뒤 남은 예상분을 보수적으로 조정해 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
                 if (hasMiddleGap) basisMsg += ' 중간 영업일 공란이 있어 실제 월 누계가 낮게 계산될 수 있습니다.';
             }
 
