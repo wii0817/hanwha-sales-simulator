@@ -3020,7 +3020,7 @@
                             </div>
                             <div class="legend-item">
                                 <span class="legend-line" style="border-top: 1px dashed #e11d48;"></span>
-                                <span style="color: #e11d48;">마감 목표선</span>
+                                <span style="color: #e11d48;">마감 목표 가이드</span>
                             </div>
                         </div>
                     </div>
@@ -3179,16 +3179,17 @@
                             <p>과거 월별 진도율에 금요일·월마감일 특수 매출 가중치를 결합해 월말 도착점을 예측합니다.</p>
                         </div>
                         <div class="legend-area">
-                            <div class="legend-item"><span class="legend-line" style="background-color: #94a3b8;"></span><span>특수일 보정 평균 누적</span></div>
+                            <div class="legend-item"><span class="legend-line" style="background-color: #94a3b8;"></span><span>과거 평균 누적</span></div>
                             <div class="legend-item"><span class="legend-line" style="background-color: #10b981;"></span><span>현재 월 실제 누적</span></div>
-                            <div class="legend-item"><span class="legend-line" style="border-top: 2px dashed #F37321;"></span><span style="color: var(--hanwha-orange);">월마감 예상 전개</span></div>
+                            <div class="legend-item"><span class="legend-line" style="border-top: 2px dashed #F37321;"></span><span style="color: var(--hanwha-orange);">자동예상 전개</span></div>
+                            <div class="legend-item"><span class="legend-line" style="border-top: 1px dashed #e11d48;"></span><span style="color: #e11d48;">마감 목표 가이드</span></div>
                         </div>
                     </div>
                     <div class="chart-container">
                         <svg id="month-chart-svg" viewBox="0 0 750 350" class="chart-svg"></svg>
                     </div>
                     <div class="chart-footer">
-                        <span>※ 월별 영업일 수가 서로 달라도 전체 월 진행률에 맞춰 보정하며, 금요일과 월마감 집중일은 더 높은 일마감 비중으로 반영합니다.</span>
+                        <span>※ 과거 월별 누적 전개를 평균낸 뒤 금요일과 월마감 집중일의 차이를 반영합니다. 붉은 점선은 월 목표를 달성하기 위해 영업일별로 도달해야 하는 누적 가이드입니다.</span>
                         <div style="display: flex; gap: 12px; flex-shrink: 0;"><span class="text-emerald">● 입력 실적</span><span class="text-orange">● 예상 실적</span></div>
                     </div>
                 </div>
@@ -3197,7 +3198,7 @@
                     <div>
                         <div class="card-title-area" style="margin-bottom: 16px;">
                             <h3>영업일별 월진도 가이드</h3>
-                            <p>실제 일마감과 예측 표준 일마감의 차이를 함께 보여줍니다.</p>
+                            <p>실제 일마감과 과거 월별 전개 패턴을 기준으로 한 일마감 가이드의 차이를 함께 보여줍니다.</p>
                         </div>
                         <div id="monthly-timeline-list-container" class="timeline-list" style="max-height: 420px;"></div>
                     </div>
@@ -3890,6 +3891,49 @@
             }
         }
 
+        // 누적 실적은 시간의 흐름에 따라 감소할 수 없으므로 원본 행과 평균 곡선을 단조 증가 형태로 보정합니다.
+        function normalizeDailyCumulativeRow(hourly) {
+            const normalized = {};
+            let runningMax = 0;
+            SLOT_KEYS.forEach(key => {
+                const raw = hourly ? hourly[key] : null;
+                if (raw !== null && raw !== undefined && raw !== '' && Number.isFinite(Number(raw))) {
+                    runningMax = Math.max(runningMax, Number(raw));
+                    normalized[key] = runningMax;
+                } else {
+                    normalized[key] = null;
+                }
+            });
+            return normalized;
+        }
+
+        function makeMonotoneDailyRatios(ratios) {
+            const result = {};
+            let previous = 0;
+            SLOT_KEYS.forEach((key, idx) => {
+                let value = Number(ratios[key]);
+                if (!Number.isFinite(value)) value = previous;
+                value = Math.max(previous, Math.min(value, 1));
+                if (idx === SLOT_KEYS.length - 1) value = 1;
+                result[key] = value;
+                previous = value;
+            });
+            return result;
+        }
+
+        function buildAverageDailyRatios(rows) {
+            const ratios = {};
+            SLOT_KEYS.forEach((key, idx) => {
+                const values = rows.map(day => {
+                    const total = Number(day.total) || 0;
+                    const value = day.normalizedHourly ? day.normalizedHourly[key] : null;
+                    return total > 0 && value !== null ? Math.min(Math.max(Number(value) / total, 0), 1) : null;
+                }).filter(value => value !== null && Number.isFinite(value));
+                ratios[key] = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : (idx + 1) / SLOT_KEYS.length;
+            });
+            return makeMonotoneDailyRatios(ratios);
+        }
+
         // 비중 점유율 및 누적 마감 예측 통계 핵심 알고리즘
         function calculateStats() {
             // 철저하게 선택된 분석 모드로 세그먼트 필터링 가공
@@ -3930,53 +3974,51 @@
 
                 let predictedTotal = applyConservativeForecast(todaySum || dailyTarget, todaySum, dailyTarget, activeKeys.length === SLOT_KEYS.length, []);
                 const predictionTrendLine = {};
+                const targetGuideLine = {};
                 SLOT_KEYS.forEach(key => {
                     predictionTrendLine[key] = predictedTotal * avgSingleRatios[key];
+                    targetGuideLine[key] = dailyTarget * avgSingleRatios[key];
                 });
 
                 return {
                     processedDays: [], avgSingleRatios, avgCumulativeValues, averageTotalSales,
                     historicalTotals: [], historicalMinTotal: dailyTarget, historicalMaxTotal: dailyTarget,
                     todaySum, todayInputs, activeKeys, lastInputKey: null, predictedTotal,
-                    predictionTrendLine, todayCumulativeList: todayInputs, basisMsg: "아카이브가 현재 비어 있어 설정 목표를 기준으로 예측합니다.",
+                    predictionTrendLine, targetGuideLine, todayCumulativeList: todayInputs, basisMsg: "아카이브가 현재 비어 있어 설정 목표를 기준으로 예측합니다.",
                     confidenceScore: 0, confidenceGrade: "모수 부족"
                 };
             }
 
             // 아카이브 실적이 있을 때 가동
             const processedDays = filteredHistory.map(day => {
-                const total = Number(day.hourly['close']) || Number(day.hourly.close) || 0;
-                const singleRatios = {};
-                SLOT_KEYS.forEach(key => {
-                    const val = day.hourly[key];
-                    if (total > 0 && val !== null && val !== undefined && val !== '') {
-                        singleRatios[key] = Number(val) / total;
-                    } else {
-                        singleRatios[key] = null; 
-                    }
-                });
+                const normalizedHourly = normalizeDailyCumulativeRow(day.hourly || {});
+                const total = Number(normalizedHourly.close) || 0;
+                return { ...day, normalizedHourly, total };
+            }).filter(day => day.total > 0);
 
-                return { ...day, total, singleRatios };
+            // 금요일·월마감일처럼 표본이 적은 모드는 해당 모드 평균과 전체 아카이브 평균을 혼합합니다.
+            const allProcessedDays = historicalData.map(day => {
+                const normalizedHourly = normalizeDailyCumulativeRow(day.hourly || {});
+                const total = Number(normalizedHourly.close) || 0;
+                return { ...day, normalizedHourly, total };
+            }).filter(day => day.total > 0);
+            const modeRatios = buildAverageDailyRatios(processedDays);
+            const allRatios = buildAverageDailyRatios(allProcessedDays.length ? allProcessedDays : processedDays);
+            const sampleWeight = Math.min(processedDays.length / 6, 1);
+            const blendedRatios = {};
+            SLOT_KEYS.forEach(key => {
+                blendedRatios[key] = (modeRatios[key] * sampleWeight) + (allRatios[key] * (1 - sampleWeight));
             });
+            const avgSingleRatios = makeMonotoneDailyRatios(blendedRatios);
 
-            const avgSingleRatios = {};
+            const historicalTotalsForAverage = processedDays.map(day => day.total).filter(value => value > 0);
+            const averageTotalSales = historicalTotalsForAverage.length
+                ? historicalTotalsForAverage.reduce((sum, value) => sum + value, 0) / historicalTotalsForAverage.length
+                : dailyTarget;
             const avgCumulativeValues = {};
-
             SLOT_KEYS.forEach(key => {
-                const activeRatios = processedDays.map(d => d.singleRatios[key]).filter(r => r !== null && r !== undefined);
-                avgSingleRatios[key] = activeRatios.length > 0 ? activeRatios.reduce((sum, r) => sum + r, 0) / activeRatios.length : 0;
+                avgCumulativeValues[key] = averageTotalSales * avgSingleRatios[key];
             });
-
-            SLOT_KEYS.forEach(key => {
-                const activeVals = processedDays.map(d => {
-                    const val = d.hourly[key];
-                    return (val !== null && val !== undefined && val !== '') ? Number(val) : null;
-                }).filter(v => v !== null);
-
-                avgCumulativeValues[key] = activeVals.length > 0 ? activeVals.reduce((sum, v) => sum + v, 0) / activeVals.length : 0;
-            });
-
-            const averageTotalSales = avgCumulativeValues['close'];
             const historicalTotals = processedDays.map(day => Number(day.total) || 0).filter(value => value > 0);
             const historicalRange = getForecastHistoryRange(historicalTotals, averageTotalSales);
             const todayInputs = {};
@@ -4036,6 +4078,11 @@
                 });
             }
 
+            const targetGuideLine = {};
+            SLOT_KEYS.forEach(key => {
+                targetGuideLine[key] = dailyTarget * avgSingleRatios[key];
+            });
+
             const confidenceScore = Math.min(60 + Math.round(filteredHistory.length * 2.5), 99.2);
             let confidenceGrade = "보통 (데이터 안정)";
             if (filteredHistory.length >= 15) confidenceGrade = "매우 높음 (수렴 최고조)";
@@ -4046,7 +4093,7 @@
                 processedDays, avgSingleRatios, avgCumulativeValues, averageTotalSales,
                 historicalTotals, historicalMinTotal: historicalRange.min, historicalMaxTotal: historicalRange.max,
                 todaySum, todayInputs, activeKeys, lastInputKey, predictedTotal,
-                predictionTrendLine, todayCumulativeList: todayInputs, basisMsg,
+                predictionTrendLine, targetGuideLine, todayCumulativeList: todayInputs, basisMsg,
                 confidenceScore, confidenceGrade
             };
         }
@@ -4270,17 +4317,18 @@
                 svg.appendChild(text);
             });
 
-            const targetY = getY(dailyTarget);
-            const targetLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            targetLine.setAttribute("x1", padding.left);
-            targetLine.setAttribute("y1", targetY);
-            targetLine.setAttribute("x2", width - padding.right);
-            targetLine.setAttribute("y2", targetY);
-            targetLine.setAttribute("stroke", "var(--rose)");
-            targetLine.setAttribute("stroke-width", "1.5");
-            targetLine.setAttribute("stroke-dasharray", "3 3");
-            svg.appendChild(targetLine);
+            const targetGuidePoints = SLOT_KEYS.map((key, idx) => `${getX(idx)},${getY(stats.targetGuideLine[key] || 0)}`);
+            const targetGuidePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            targetGuidePath.setAttribute("d", `M ${targetGuidePoints.join(' L ')}`);
+            targetGuidePath.setAttribute("fill", "none");
+            targetGuidePath.setAttribute("stroke", "var(--rose)");
+            targetGuidePath.setAttribute("stroke-width", "1.8");
+            targetGuidePath.setAttribute("stroke-dasharray", "3 3");
+            targetGuidePath.setAttribute("stroke-linecap", "round");
+            targetGuidePath.setAttribute("stroke-linejoin", "round");
+            svg.appendChild(targetGuidePath);
 
+            const targetY = getY(dailyTarget);
             const targetText = document.createElementNS("http://www.w3.org/2000/svg", "text");
             targetText.setAttribute("x", width - padding.right);
             targetText.setAttribute("y", targetY - 6);
@@ -4288,7 +4336,7 @@
             targetText.setAttribute("font-size", "9.5");
             targetText.setAttribute("font-weight", "900");
             targetText.setAttribute("text-anchor", "end");
-            targetText.textContent = `지점목표: ${dailyTarget.toLocaleString()}천`;
+            targetText.textContent = `목표 가이드: ${dailyTarget.toLocaleString()}천`;
             svg.appendChild(targetText);
 
             let avgPoints = [];
@@ -5632,6 +5680,7 @@
 
             const predictedCumLine = {};
             const averageCumLine = {};
+            const targetGuideLine = {};
             const expectedDailyLine = {};
             const actualCumLine = {};
             let actualRunning = 0;
@@ -5642,6 +5691,7 @@
                 const dailyRatio = adjustedShape.dailyRatios[key] || Math.max(ratio - (adjustedShape.cumRatios[`bd${dayNo - 1}`] || 0), 0);
                 predictedCumLine[key] = predictedTotal * ratio;
                 averageCumLine[key] = averageTotalSales * ratio;
+                targetGuideLine[key] = monthlyTarget * ratio;
                 expectedDailyLine[key] = predictedTotal * dailyRatio;
                 prevPredictedCum = predictedCumLine[key];
 
@@ -5671,7 +5721,7 @@
             } else {
                 const ratioPct = (currentAvgCumRatio * 100).toFixed(1);
                 const lastDateLabel = getMonthlyBusinessDateLabel(lastInputIndex);
-                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 금요일/월마감 특수일 보정 누적비중 ${ratioPct}%를 역산하고, 과거 월합계 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
+                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 월별 패턴과 특수일을 반영한 누적비중 ${ratioPct}%를 역산하고, 과거 월합계 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
                 if (hasMiddleGap) basisMsg += ' 중간 영업일 공란이 있어 실제 월 누계가 낮게 계산될 수 있습니다.';
             }
 
@@ -5690,6 +5740,7 @@
                 predictedTotal,
                 predictedCumLine,
                 averageCumLine,
+                targetGuideLine,
                 expectedDailyLine,
                 actualCumLine,
                 adjustedDailyRatios: adjustedShape.dailyRatios,
@@ -5770,7 +5821,7 @@
                     if (val !== null) {
                         const diff = val - expected;
                         const sign = diff >= 0 ? '▲' : '▼';
-                        helpEl.innerHTML = `${sign} ${Math.abs(Math.round(diff)).toLocaleString()}천 vs 보정표준${labelSuffix}`;
+                        helpEl.innerHTML = `${sign} ${Math.abs(Math.round(diff)).toLocaleString()}천 vs 과거 패턴${labelSuffix}`;
                         helpEl.style.color = diff >= 0 ? 'var(--emerald)' : 'var(--rose)';
                     } else {
                         helpEl.innerHTML = `예상 ${Math.round(expected).toLocaleString()}천${labelSuffix}`;
@@ -5813,11 +5864,11 @@
                     <div style="display: flex; gap: 12px; align-items: center; justify-content: flex-end; flex: 1;">
                         <div style="text-align: right;">
                             <div class="value-main">${isInputted ? inputVal.toLocaleString() + ' <span style="font-size: 9.5px; font-weight: normal; color: var(--text-secondary);">천원</span>' : '<span style="color: var(--text-muted); font-weight: normal;">미입력</span>'}</div>
-                            <div class="value-sub">보정표준 일마감: ${Math.round(expectedDaily).toLocaleString()}천</div>
+                            <div class="value-sub">과거 패턴 기준: ${Math.round(expectedDaily).toLocaleString()}천</div>
                         </div>
                         <div style="text-align: right; border-left: 1px solid var(--border-color); padding-left: 10px; min-width: 120px;">
                             <div class="value-sub" style="color: var(--hanwha-orange); font-weight: bold;">예상 누계: ${Math.round(expectedCum).toLocaleString()}천</div>
-                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">보정표준 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">대비: -</div>'}
+                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">과거 패턴 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">대비: -</div>'}
                         </div>
                     </div>
                 `;
@@ -5907,27 +5958,6 @@
                 }
             }
 
-            const targetY = getY(monthlyTarget);
-            const targetLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            targetLine.setAttribute('x1', padding.left);
-            targetLine.setAttribute('y1', targetY);
-            targetLine.setAttribute('x2', width - padding.right);
-            targetLine.setAttribute('y2', targetY);
-            targetLine.setAttribute('stroke', 'var(--rose)');
-            targetLine.setAttribute('stroke-width', '1.5');
-            targetLine.setAttribute('stroke-dasharray', '3 3');
-            svg.appendChild(targetLine);
-
-            const targetText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            targetText.setAttribute('x', width - padding.right);
-            targetText.setAttribute('y', targetY - 6);
-            targetText.setAttribute('fill', 'var(--rose)');
-            targetText.setAttribute('font-size', '9.5');
-            targetText.setAttribute('font-weight', '900');
-            targetText.setAttribute('text-anchor', 'end');
-            targetText.textContent = `월목표: ${monthlyTarget.toLocaleString()}천`;
-            svg.appendChild(targetText);
-
             const createPath = (points, stroke, widthValue, dashArray, opacity) => {
                 if (points.length === 0) return;
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -5945,9 +5975,11 @@
             const avgPoints = [];
             const predPoints = [];
             const actualPoints = [];
+            const targetGuidePoints = [];
             for (let dayNo = 1; dayNo <= workdays; dayNo++) {
                 avgPoints.push(`${getX(dayNo)},${getY(stats.averageCumLine[`bd${dayNo}`] || 0)}`);
                 predPoints.push(`${getX(dayNo)},${getY(stats.predictedCumLine[`bd${dayNo}`] || 0)}`);
+                targetGuidePoints.push(`${getX(dayNo)},${getY(stats.targetGuideLine[`bd${dayNo}`] || 0)}`);
                 if (stats.actualCumLine[`bd${dayNo}`] !== null) {
                     actualPoints.push(`${getX(dayNo)},${getY(stats.actualCumLine[`bd${dayNo}`])}`);
                 }
@@ -5955,6 +5987,18 @@
             createPath(avgPoints, '#94a3b8', '2', null, '0.65');
             createPath(predPoints, 'var(--hanwha-orange)', '2.2', '4 4', null);
             createPath(actualPoints, 'var(--emerald)', '4', null, null);
+            createPath(targetGuidePoints, 'var(--rose)', '1.8', '3 3', null);
+
+            const targetY = getY(monthlyTarget);
+            const targetText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            targetText.setAttribute('x', width - padding.right);
+            targetText.setAttribute('y', targetY - 6);
+            targetText.setAttribute('fill', 'var(--rose)');
+            targetText.setAttribute('font-size', '9.5');
+            targetText.setAttribute('font-weight', '900');
+            targetText.setAttribute('text-anchor', 'end');
+            targetText.textContent = `목표 가이드: ${monthlyTarget.toLocaleString()}천`;
+            svg.appendChild(targetText);
 
             for (let dayNo = 1; dayNo <= workdays; dayNo++) {
                 const key = `bd${dayNo}`;
@@ -6791,11 +6835,11 @@
                     <div style="display: flex; gap: 12px; align-items: center; justify-content: flex-end; flex: 1;">
                         <div style="text-align: right;">
                             <div class="value-main">${isInputted ? inputVal.toLocaleString() + ' <span style="font-size: 9.5px; font-weight: normal; color: var(--text-secondary);">천원</span>' : '<span style="color: var(--text-muted); font-weight: normal;">미입력</span>'}</div>
-                            <div class="value-sub">보정표준 일마감: ${Math.round(expectedDaily).toLocaleString()}천</div>
+                            <div class="value-sub">과거 패턴 기준: ${Math.round(expectedDaily).toLocaleString()}천</div>
                         </div>
                         <div style="text-align: right; border-left: 1px solid var(--border-color); padding-left: 10px; min-width: 120px;">
                             <div class="value-sub" style="color: var(--hanwha-orange); font-weight: bold;">예상 누계: ${Math.round(expectedCum).toLocaleString()}천</div>
-                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">보정표준 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">대비: -</div>'}
+                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">과거 패턴 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">대비: -</div>'}
                         </div>
                     </div>
                 `;
