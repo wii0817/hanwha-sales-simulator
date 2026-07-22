@@ -3324,7 +3324,7 @@
                     <div id="archive-recovery-status" class="archive-recovery-status">브라우저 저장소와 Firebase에 남아 있는 아카이브를 확인하고 있습니다.</div>
                 </div>
                 <div class="archive-recovery-actions">
-                    <button type="button" class="archive-recovery-btn primary" onclick="runArchiveRecoveryNow()">아카이브 복구 실행</button>
+                    <button type="button" class="archive-recovery-btn primary" onclick="reconnectFirebaseArchiveNow()">Firebase 원본 다시 불러오기</button>
                     <button type="button" class="archive-recovery-btn" onclick="exportArchiveRecoveryPackage()">복구자료 백업</button>
                 </div>
             </div>
@@ -8137,6 +8137,136 @@
                 archiveRecoveryLoadDedicatedStore();
                 archiveRecoveryCreateLocalSnapshot('startup-local-candidate', true);
             }, 350);
+        };
+
+
+        /* =========================================================
+           Firebase 원본 아카이브 강제 재연결
+           - 기존 sharedState / archiveStore / archiveBackups를 다시 읽음
+           - Firebase 배열이 숫자 키 객체여도 정상 복원
+           - 원격 자료를 먼저 병합한 뒤에만 현재 sharedState에 재저장
+           ========================================================= */
+        let firebaseArchiveReconnectRunning = false;
+        let firebaseArchiveReconnectCompleted = false;
+
+        async function reconnectFirebaseArchiveNow(options = {}) {
+            if (firebaseArchiveReconnectRunning) return;
+            firebaseArchiveReconnectRunning = true;
+            const silent = !!options.silent;
+            archiveRecoverySetStatus('Firebase 원본 실적 아카이브에 다시 연결하고 있습니다.', 'warning');
+
+            try {
+                if (!window.firebase || !window.firebase.database) {
+                    throw new Error('Firebase SDK가 로드되지 않았습니다.');
+                }
+                if (!firebase.apps || firebase.apps.length === 0) {
+                    firebase.initializeApp(FIREBASE_CONFIG);
+                }
+
+                const db = firebase.database();
+                const readTasks = [
+                    { path: FIREBASE_DB_PATH, label: 'sharedState' },
+                    { path: FIREBASE_ARCHIVE_STORE_PATH, label: 'archiveStore' },
+                    { path: FIREBASE_ARCHIVE_BACKUPS_PATH, label: 'archiveBackups', backups: true },
+                    { path: 'hanwhaSalesSimulator', label: 'projectRoot' }
+                ];
+
+                const results = await Promise.all(readTasks.map(async item => {
+                    try {
+                        const ref = item.backups
+                            ? db.ref(item.path).orderByKey().limitToLast(ARCHIVE_RECOVERY_MAX_FIREBASE_SNAPSHOTS)
+                            : db.ref(item.path);
+                        const snapshot = await ref.once('value');
+                        return { ...item, value: snapshot.val(), exists: snapshot.exists() };
+                    } catch (error) {
+                        console.warn(`Firebase ${item.label} 읽기 실패:`, error);
+                        return { ...item, value: null, exists: false, error };
+                    }
+                }));
+
+                let remoteDaily = [];
+                let remoteMonthly = [];
+                const connectedSources = [];
+
+                results.forEach(result => {
+                    if (!result.exists || result.value == null) return;
+                    const found = archiveRecoveryExtractFromFirebaseValue(result.value, `firebase-reconnect:${result.label}`);
+                    remoteDaily = archiveRecoveryMergeDaily(remoteDaily, found.daily);
+                    remoteMonthly = archiveRecoveryMergeMonthly(remoteMonthly, found.monthly);
+                    if (found.daily.length || found.monthly.length) {
+                        connectedSources.push(`${result.label}(일 ${found.daily.length} / 월 ${found.monthly.length})`);
+                    }
+                });
+
+                if (!remoteDaily.length && !remoteMonthly.length) {
+                    archiveRecoverySetStatus('Firebase 연결은 되었지만 원본 아카이브 자료를 찾지 못했습니다. DB 경로와 읽기 규칙을 확인해 주세요.', 'error');
+                    if (!silent) showToast('Firebase에서 실적 아카이브를 찾지 못했습니다.', 'error');
+                    return;
+                }
+
+                const beforeDaily = historicalData.length;
+                const beforeMonthly = monthlyHistoricalData.length;
+                const mergedDaily = archiveRecoveryMergeDaily(remoteDaily, historicalData, archiveRecoveryBootCandidates.daily);
+                const mergedMonthly = archiveRecoveryMergeMonthly(remoteMonthly, monthlyHistoricalData, archiveRecoveryBootCandidates.monthly);
+
+                historicalData = mergedDaily;
+                monthlyHistoricalData = mergedMonthly;
+                archiveRecoveryPersistLocal();
+                archiveRecoveryCreateLocalSnapshot('firebase-forced-reconnect', true);
+
+                try {
+                    saveToStorage();
+                    saveMonthlyToStorage();
+                } catch (saveError) {
+                    console.warn('복구 자료 로컬 저장 보강 실패:', saveError);
+                }
+
+                try {
+                    const stats = calculateStats();
+                    renderArchiveTable(stats);
+                    if (typeof renderMonthlyArchiveTable === 'function') renderMonthlyArchiveTable();
+                    runAnalyticsAndRender();
+                    if (typeof runMonthlyAnalyticsAndRender === 'function') runMonthlyAnalyticsAndRender();
+                } catch (renderError) {
+                    console.warn('복구 자료 화면 갱신 실패:', renderError);
+                }
+
+                // 원격 원본을 읽고 병합한 다음에만 현재 공유 경로를 갱신합니다.
+                firebaseDatabaseRef = db.ref(FIREBASE_DB_PATH);
+                firebaseSyncReady = true;
+                firebaseApplyingRemote = false;
+                const payload = getSharedStatePayload();
+                firebaseLastSerialized = JSON.stringify(payload);
+                await firebaseDatabaseRef.set(payload);
+                await archiveRecoveryWriteDedicatedStore('firebase-forced-reconnect', true);
+
+                firebaseArchiveReconnectCompleted = true;
+                const addedDaily = Math.max(historicalData.length - beforeDaily, 0);
+                const addedMonthly = Math.max(monthlyHistoricalData.length - beforeMonthly, 0);
+                const sourceText = connectedSources.join(', ');
+                archiveRecoverySetStatus(
+                    `Firebase 재연결 완료: 일별 ${historicalData.length}건 · 월별 ${monthlyHistoricalData.length}개월 ` +
+                    `(추가 복구 일별 +${addedDaily}, 월별 +${addedMonthly})`,
+                    'success'
+                );
+                if (!silent || addedDaily > 0 || addedMonthly > 0) {
+                    showToast(`Firebase 아카이브 연결 완료: 일별 ${historicalData.length}건, 월별 ${monthlyHistoricalData.length}개월`, 'success');
+                }
+                console.info('Firebase 아카이브 재연결 원본:', sourceText);
+            } catch (error) {
+                console.error('Firebase 아카이브 강제 재연결 실패:', error);
+                archiveRecoverySetStatus(`Firebase 재연결 실패: ${error.message || error}`, 'error');
+                if (!silent) showToast('Firebase 재연결에 실패했습니다. Firebase 읽기 권한을 확인해 주세요.', 'error');
+            } finally {
+                firebaseArchiveReconnectRunning = false;
+            }
+        }
+
+        const __firebaseReconnectOriginalOnload = window.onload;
+        window.onload = function() {
+            if (typeof __firebaseReconnectOriginalOnload === 'function') __firebaseReconnectOriginalOnload();
+            // 기존 페이지 초기화와 Firebase SDK 준비가 끝난 뒤 원본 아카이브를 우선 재조회합니다.
+            setTimeout(() => reconnectFirebaseArchiveNow({ silent: true }), 1200);
         };
 
 </script>
