@@ -2923,7 +2923,7 @@
                         <span class="metric-unit">천원</span>
                     </div>
                     <div class="metric-desc">
-                        <span>선택 모드 평균 대비</span>
+                        <span>마감 목표 대비</span>
                         <span id="predict-diff" class="font-bold text-emerald">▲ 0천원</span>
                     </div>
                 </div>
@@ -3121,7 +3121,7 @@
                         <span class="metric-unit">천원</span>
                     </div>
                     <div class="metric-desc">
-                        <span>월 평균 대비</span>
+                        <span>마감 목표 대비</span>
                         <span id="month-predict-diff" class="font-bold text-emerald">▲ 0천원</span>
                     </div>
                 </div>
@@ -4110,7 +4110,7 @@
             const modeTextMap = { weekday: '평일 평균', friday: '금요일 평균', closing: '마감일 평균' };
             document.getElementById('legend-mode-text').innerText = modeTextMap[currentAnalysisMode] || '기준 평균';
 
-            const predictDiff = Math.round(stats.predictedTotal - stats.averageTotalSales);
+            const predictDiff = Math.round(stats.predictedTotal - dailyTarget);
             const diffEl = document.getElementById('predict-diff');
             if (predictDiff >= 0) {
                 diffEl.innerText = `▲ ${predictDiff.toLocaleString()}천원`;
@@ -4208,19 +4208,20 @@
                 // [실제 값 vs 누적 예상치 실시간 오차 계산 엔진]
                 let diffHtml = '';
                 if (isInputted) {
-                    const diff = inputVal - expectedValueAtThisHour;
-                    // 오차 백분율 산출 (0으로 나누기 예외 처리 보완)
-                    const pct = expectedValueAtThisHour > 0 ? ((diff / expectedValueAtThisHour) * 100).toFixed(1) : '0.0';
+                    const targetGuideAtThisHour = Math.round(stats.targetGuideLine[slot.key] || (dailyTarget * ratio));
+                    const diff = inputVal - targetGuideAtThisHour;
+                    // 마감 목표 가이드 대비 차이
+                    const pct = targetGuideAtThisHour > 0 ? ((diff / targetGuideAtThisHour) * 100).toFixed(1) : '0.0';
                     
                     if (diff > 0) {
-                        diffHtml = `<div class="value-sub" style="color: var(--emerald); font-weight: bold; font-size: 10px; margin-top: 1px;">대비: ▲${diff.toLocaleString()}천 (+${pct}%)</div>`;
+                        diffHtml = `<div class="value-sub" style="color: var(--emerald); font-weight: bold; font-size: 10px; margin-top: 1px;">마감 목표 가이드 대비: ▲${diff.toLocaleString()}천 (+${pct}%)</div>`;
                     } else if (diff < 0) {
-                        diffHtml = `<div class="value-sub" style="color: var(--rose); font-weight: bold; font-size: 10px; margin-top: 1px;">대비: ▼${Math.abs(diff).toLocaleString()}천 (-${Math.abs(pct)}%)</div>`;
+                        diffHtml = `<div class="value-sub" style="color: var(--rose); font-weight: bold; font-size: 10px; margin-top: 1px;">마감 목표 가이드 대비: ▼${Math.abs(diff).toLocaleString()}천 (-${Math.abs(pct)}%)</div>`;
                     } else {
-                        diffHtml = `<div class="value-sub" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">대비: 0천 (0.0%)</div>`;
+                        diffHtml = `<div class="value-sub" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">마감 목표 가이드 대비: 0천 (0.0%)</div>`;
                     }
                 } else {
-                    diffHtml = `<div class="value-sub" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">대비: -</div>`;
+                    diffHtml = `<div class="value-sub" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">마감 목표 가이드 대비: -</div>`;
                 }
 
                 const item = document.createElement('div');
@@ -4239,7 +4240,7 @@
                             ${isInputted ? `<div class="value-sub" style="color: var(--emerald); font-weight: bold;">이 시각 페이스 최종예상: ${singleTargetPredictStr}</div>` : `<div class="value-sub" style="color: var(--text-muted);">평균 누적: ${avg.toLocaleString()}천</div>`}
                         </div>
                         <div style="text-align: right; border-left: 1px solid var(--border-color); padding-left: 10px; min-width: 120px;">
-                            <div class="value-sub">목표 표준: ${Math.round(dailyTarget * ratio).toLocaleString()}천</div>
+                            <div class="value-sub">마감 목표 가이드: ${Math.round(dailyTarget * ratio).toLocaleString()}천</div>
                             <div class="value-sub" style="color: var(--hanwha-orange); font-weight: bold;">누적 예상: ${expectedValueAtThisHour.toLocaleString()}천</div>
                             ${diffHtml}
                         </div>
@@ -5815,7 +5816,7 @@
 
             const diffEl = document.getElementById('month-predict-diff');
             if (diffEl) {
-                const diff = Math.round(stats.predictDiff);
+                const diff = Math.round(stats.predictedTotal - monthlyTarget);
                 if (diff >= 0) {
                     diffEl.innerText = `▲ ${diff.toLocaleString()}천원`;
                     diffEl.className = 'font-bold text-emerald';
@@ -5850,9 +5851,11 @@
                     const meta = stats.specialDayMeta[key] || getMonthlySpecialDayMeta(idx + 1);
                     const labelSuffix = meta.labelText ? ` · ${meta.labelText}` : '';
                     if (val !== null) {
-                        const diff = val - expected;
+                        const actualCum = stats.actualCumLine[key] || 0;
+                        const targetGuideCum = stats.targetGuideLine[key] || 0;
+                        const diff = actualCum - targetGuideCum;
                         const sign = diff >= 0 ? '▲' : '▼';
-                        helpEl.innerHTML = `${sign} ${Math.abs(Math.round(diff)).toLocaleString()}천 vs 과거 패턴${labelSuffix}`;
+                        helpEl.innerHTML = `${sign} ${Math.abs(Math.round(diff)).toLocaleString()}천 vs 마감 목표 가이드${labelSuffix}`;
                         helpEl.style.color = diff >= 0 ? 'var(--emerald)' : 'var(--rose)';
                     } else {
                         helpEl.innerHTML = `예상 ${Math.round(expected).toLocaleString()}천${labelSuffix}`;
@@ -5877,8 +5880,10 @@
                 const isInputted = inputVal !== null;
                 const expectedDaily = stats.expectedDailyLine[key] || 0;
                 const expectedCum = stats.predictedCumLine[key] || 0;
-                const diff = isInputted ? inputVal - expectedDaily : 0;
-                const pct = expectedDaily > 0 ? ((diff / expectedDaily) * 100).toFixed(1) : '0.0';
+                const actualCum = stats.actualCumLine[key] || 0;
+                const targetGuideCum = stats.targetGuideLine[key] || 0;
+                const diff = isInputted ? actualCum - targetGuideCum : 0;
+                const pct = targetGuideCum > 0 ? ((diff / targetGuideCum) * 100).toFixed(1) : '0.0';
                 const meta = stats.specialDayMeta[key] || getMonthlySpecialDayMeta(dayNo);
                 const dateLabel = getMonthlyBusinessDateLabel(dayNo);
                 const chipHtml = meta.labelText ? `<span class="special-day-chip ${meta.chipClass}">${meta.labelText}</span>` : '';
@@ -5899,7 +5904,7 @@
                         </div>
                         <div style="text-align: right; border-left: 1px solid var(--border-color); padding-left: 10px; min-width: 120px;">
                             <div class="value-sub" style="color: var(--hanwha-orange); font-weight: bold;">예상 누계: ${Math.round(expectedCum).toLocaleString()}천</div>
-                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">과거 패턴 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">대비: -</div>'}
+                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">마감 목표 가이드 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">마감 목표 가이드 대비: -</div>'}
                         </div>
                     </div>
                 `;
@@ -6846,8 +6851,10 @@
                 const isInputted = inputVal !== null;
                 const expectedDaily = stats.expectedDailyLine[key] || 0;
                 const expectedCum = stats.predictedCumLine[key] || 0;
-                const diff = isInputted ? inputVal - expectedDaily : 0;
-                const pct = expectedDaily > 0 ? ((diff / expectedDaily) * 100).toFixed(1) : '0.0';
+                const actualCum = stats.actualCumLine[key] || 0;
+                const targetGuideCum = stats.targetGuideLine[key] || 0;
+                const diff = isInputted ? actualCum - targetGuideCum : 0;
+                const pct = targetGuideCum > 0 ? ((diff / targetGuideCum) * 100).toFixed(1) : '0.0';
                 const meta = stats.specialDayMeta[key] || getMonthlySpecialDayMeta(dayNo);
                 const dateLabel = getMonthlyBusinessDateLabel(dayNo);
                 const mappedDate = monthlyBusinessDateMap && monthlyBusinessDateMap[key] ? monthlyBusinessDateMap[key] : '';
@@ -6870,7 +6877,7 @@
                         </div>
                         <div style="text-align: right; border-left: 1px solid var(--border-color); padding-left: 10px; min-width: 120px;">
                             <div class="value-sub" style="color: var(--hanwha-orange); font-weight: bold;">예상 누계: ${Math.round(expectedCum).toLocaleString()}천</div>
-                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">과거 패턴 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">대비: -</div>'}
+                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">마감 목표 가이드 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">마감 목표 가이드 대비: -</div>'}
                         </div>
                     </div>
                 `;
