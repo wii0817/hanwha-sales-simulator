@@ -5683,24 +5683,55 @@
             const targetGuideLine = {};
             const expectedDailyLine = {};
             const actualCumLine = {};
+
+            // 실제 누적을 먼저 계산합니다. 자동예상 전개는 마지막 실제 누적 지점에서
+            // 시작해 남은 예상액만 과거 월진도 패턴에 따라 배분합니다.
             let actualRunning = 0;
-            let prevPredictedCum = 0;
+            const actualRunningByDay = {};
             for (let dayNo = 1; dayNo <= monthlyBusinessDays; dayNo++) {
                 const key = `bd${dayNo}`;
-                const ratio = adjustedShape.cumRatios[key] || getMonthlyAverageCumRatio(dayNo / monthlyBusinessDays, processedRows);
-                const dailyRatio = adjustedShape.dailyRatios[key] || Math.max(ratio - (adjustedShape.cumRatios[`bd${dayNo - 1}`] || 0), 0);
-                predictedCumLine[key] = predictedTotal * ratio;
-                averageCumLine[key] = averageTotalSales * ratio;
-                targetGuideLine[key] = monthlyTarget * ratio;
-                expectedDailyLine[key] = predictedTotal * dailyRatio;
-                prevPredictedCum = predictedCumLine[key];
-
                 if (currentDailyValues[key] !== null) {
                     actualRunning += currentDailyValues[key];
                     actualCumLine[key] = actualRunning;
                 } else {
                     actualCumLine[key] = null;
                 }
+                actualRunningByDay[key] = actualRunning;
+            }
+
+            const anchorRatio = lastInputIndex > 0
+                ? Math.max(0, Math.min(1, adjustedShape.cumRatios[`bd${lastInputIndex}`] || currentAvgCumRatio || 0))
+                : 0;
+            const remainingForecastAmount = Math.max(predictedTotal - currentCumulative, 0);
+            const remainingShapeDenominator = Math.max(1 - anchorRatio, 0.000001);
+            let previousForecastCum = 0;
+
+            for (let dayNo = 1; dayNo <= monthlyBusinessDays; dayNo++) {
+                const key = `bd${dayNo}`;
+                const ratio = Math.max(0, Math.min(1,
+                    adjustedShape.cumRatios[key] || getMonthlyAverageCumRatio(dayNo / monthlyBusinessDays, processedRows)
+                ));
+                averageCumLine[key] = averageTotalSales * ratio;
+                targetGuideLine[key] = monthlyTarget * ratio;
+
+                if (lastInputIndex > 0 && dayNo <= lastInputIndex) {
+                    // 입력 완료 구간은 자동예상선이 실제 누적선과 정확히 겹치게 합니다.
+                    predictedCumLine[key] = actualRunningByDay[key];
+                } else if (lastInputIndex > 0) {
+                    // 마지막 실제 누적 이후의 과거 패턴만 0~100%로 재정규화합니다.
+                    const futureProgress = Math.max(0, Math.min(1, (ratio - anchorRatio) / remainingShapeDenominator));
+                    predictedCumLine[key] = currentCumulative + (remainingForecastAmount * futureProgress);
+                } else {
+                    predictedCumLine[key] = predictedTotal * ratio;
+                }
+
+                // 반올림/희소 표본 때문에 선이 뒤로 꺾이지 않도록 단조 증가를 보장합니다.
+                predictedCumLine[key] = Math.max(predictedCumLine[key], previousForecastCum);
+                if (dayNo === monthlyBusinessDays) predictedCumLine[key] = Math.max(predictedTotal, predictedCumLine[key]);
+                previousForecastCum = predictedCumLine[key];
+
+                const previousCum = dayNo > 1 ? predictedCumLine[`bd${dayNo - 1}`] : 0;
+                expectedDailyLine[key] = Math.max(predictedCumLine[key] - previousCum, 0);
             }
 
             const remainingBusinessDays = Math.max(monthlyBusinessDays - lastInputIndex, 0);
@@ -5721,7 +5752,7 @@
             } else {
                 const ratioPct = (currentAvgCumRatio * 100).toFixed(1);
                 const lastDateLabel = getMonthlyBusinessDateLabel(lastInputIndex);
-                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 월별 패턴과 특수일을 반영한 누적비중 ${ratioPct}%를 역산하고, 과거 월합계 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
+                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 월별 패턴과 특수일을 반영한 누적비중 ${ratioPct}%를 역산했습니다. 자동예상 전개는 현재 실제 누계 ${Math.round(currentCumulative).toLocaleString()}천원에서 이어지며, 남은 영업일 패턴을 적용해 과거 월합계 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
                 if (hasMiddleGap) basisMsg += ' 중간 영업일 공란이 있어 실제 월 누계가 낮게 계산될 수 있습니다.';
             }
 
