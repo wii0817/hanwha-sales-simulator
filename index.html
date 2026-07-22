@@ -2647,6 +2647,176 @@
             }
         }
 
+
+
+        /* 월마감 예측용 보장성 시간대별 추정 카드 */
+        .monthly-hourly-card {
+            margin-bottom: 24px;
+        }
+
+        .monthly-hourly-control {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .monthly-hourly-select-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 900;
+            color: var(--text-secondary);
+        }
+
+        .monthly-hourly-summary {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .monthly-hourly-summary-box {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 12px;
+            min-width: 0;
+        }
+
+        .monthly-hourly-summary-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .monthly-hourly-summary-value {
+            font-size: 17px;
+            font-weight: 950;
+            color: var(--text-primary);
+            letter-spacing: -0.4px;
+            overflow-wrap: anywhere;
+        }
+
+        .monthly-hourly-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .monthly-hourly-item {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 12px;
+            min-width: 0;
+        }
+
+        .monthly-hourly-item-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .monthly-hourly-time {
+            font-size: 11px;
+            font-weight: 950;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        .monthly-hourly-ratio {
+            font-size: 9.5px;
+            font-weight: 900;
+            color: var(--text-muted);
+        }
+
+        .monthly-hourly-value {
+            font-size: 16px;
+            font-weight: 950;
+            color: var(--hanwha-orange);
+            text-align: right;
+            margin-bottom: 8px;
+            overflow-wrap: anywhere;
+        }
+
+        .monthly-hourly-bar-track {
+            width: 100%;
+            height: 6px;
+            border-radius: 999px;
+            background: #f1f5f9;
+            overflow: hidden;
+        }
+
+        .monthly-hourly-bar {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--hanwha-orange);
+        }
+
+        .monthly-hourly-brief {
+            margin-top: 14px;
+            font-size: 11px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            font-weight: 800;
+            background: rgba(243, 115, 33, 0.035);
+            border: 1px solid rgba(243, 115, 33, 0.12);
+            border-radius: 14px;
+            padding: 12px;
+        }
+
+        @media (max-width: 932px) {
+            .monthly-hourly-summary {
+                grid-template-columns: 1fr !important;
+            }
+            .monthly-hourly-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+            .monthly-hourly-control {
+                align-items: stretch;
+            }
+            .monthly-hourly-select-wrap,
+            .monthly-hourly-select-wrap select {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .monthly-hourly-grid {
+                grid-template-columns: 1fr !important;
+            }
+            .monthly-hourly-value {
+                font-size: 18px;
+            }
+        }
+
+
+        /* 당일 마감 예측 시간대별 실적 입력 영역 복원/가시성 보강 */
+        #tab-dashboard #daily-input-section {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 0 24px 0 !important;
+        }
+        #tab-dashboard #inputs-grid-container {
+            display: grid !important;
+            visibility: visible !important;
+            min-height: 100px;
+        }
+        @media (max-width: 932px) {
+            #tab-dashboard #daily-input-section {
+                margin-bottom: 14px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -2793,6 +2963,39 @@
                 </div>
             </div>
 
+            <div id="daily-input-section" class="input-container-card daily-inline-input-card">
+                <div class="card-title-area">
+                    <h3>오늘 인보장 실시간 누적 매출 기입</h3>
+                    <p>※ 구간 실적이 아닌 <strong>[그 시간까지 달성한 누적 금액]</strong>을 적어주세요. 입력과 동시에 위 예측 현황판, 그래프, 시간대별 가이드가 함께 갱신됩니다.</p>
+                </div>
+
+                <!-- 입력 폼 그리드 -->
+                <div id="inputs-grid-container" class="grid-inputs">
+                    <!-- JS를 통해 동적 생성됨 -->
+                </div>
+
+                <!-- 입력 통계 요약 -->
+                <div class="input-summary-bar">
+                    <div>
+                        <span class="summary-sub-title">현재 입력된 누계 금액</span>
+                        <div class="summary-main-val text-emerald"><span id="sum-entered">0</span> 천원 <span id="count-entered" style="font-size: 11px; color: var(--text-secondary); font-weight: bold; margin-left: 4px;">(0개 기입 완료)</span></div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="summary-sub-title">실적 기반 최종 마감 예상</span>
+                        <div class="summary-main-val text-orange">약 <span id="predict-entered">0</span> 천원</div>
+                    </div>
+                </div>
+
+                <!-- Action 버튼 -->
+                <div class="action-bar-inputs">
+                    <button class="btn-commit" onclick="commitToday()">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                        오늘 매출을 최종 마감 데이터 아카이브로 이관하기 (Commit)
+                    </button>
+                    <button class="btn-clear" onclick="clearTodayInputs()">기입란 전체 비우기</button>
+                </div>
+            </div>
+
             <!-- 시각화 & 현황 목록 -->
             <div class="content-grid">
                 <!-- 차트 (좌측) -->
@@ -2859,38 +3062,7 @@
                 </div>
             </div>
 
-            <div class="input-container-card daily-inline-input-card">
-                <div class="card-title-area">
-                    <h3>오늘 인보장 실시간 누적 매출 기입</h3>
-                    <p>※ 구간 실적이 아닌 <strong>[그 시간까지 달성한 누적 금액]</strong>을 적어주세요. 입력과 동시에 위 예측 현황판, 그래프, 시간대별 가이드가 함께 갱신됩니다.</p>
-                </div>
 
-                <!-- 입력 폼 그리드 -->
-                <div id="inputs-grid-container" class="grid-inputs">
-                    <!-- JS를 통해 동적 생성됨 -->
-                </div>
-
-                <!-- 입력 통계 요약 -->
-                <div class="input-summary-bar">
-                    <div>
-                        <span class="summary-sub-title">현재 입력된 누계 금액</span>
-                        <div class="summary-main-val text-emerald"><span id="sum-entered">0</span> 천원 <span id="count-entered" style="font-size: 11px; color: var(--text-secondary); font-weight: bold; margin-left: 4px;">(0개 기입 완료)</span></div>
-                    </div>
-                    <div style="text-align: right;">
-                        <span class="summary-sub-title">실적 기반 최종 마감 예상</span>
-                        <div class="summary-main-val text-orange">약 <span id="predict-entered">0</span> 천원</div>
-                    </div>
-                </div>
-
-                <!-- Action 버튼 -->
-                <div class="action-bar-inputs">
-                    <button class="btn-commit" onclick="commitToday()">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
-                        오늘 매출을 최종 마감 데이터 아카이브로 이관하기 (Commit)
-                    </button>
-                    <button class="btn-clear" onclick="clearTodayInputs()">기입란 전체 비우기</button>
-                </div>
-            </div>
 
         </div>
 
@@ -2995,6 +3167,23 @@
                     <h4>보장성 월 누적 진도율 역산 브리핑 <span style="font-size: 10px; font-weight: normal; color: var(--text-secondary);">| 금요일·월마감일 특수 가중 반영</span></h4>
                     <p id="month-briefing-text">아래 입력칸에 이번달 보장성 영업일별 일마감 실적을 입력하면 월마감 예측이 시작됩니다.</p>
                 </div>
+            </div>
+
+
+
+            <div class="card-main monthly-hourly-card">
+                <div class="monthly-hourly-control">
+                    <div class="card-title-area">
+                        <h3>보장성 시간대별 실적</h3>
+                    </div>
+                    <label class="monthly-hourly-select-wrap">조회 날짜
+                        <input id="month-hourly-date-input" class="filter-select" type="date" list="month-hourly-date-list" onchange="handleMonthlyHourlyDateChange(this.value)">
+                        <datalist id="month-hourly-date-list"></datalist>
+                    </label>
+                </div>
+                <div id="monthly-hourly-summary" class="monthly-hourly-summary"></div>
+                <div id="monthly-hourly-grid" class="monthly-hourly-grid"></div>
+                <div id="monthly-hourly-brief" class="monthly-hourly-brief" style="display:none;"></div>
             </div>
 
             <div class="content-grid monthly-forecast-layout">
@@ -3432,33 +3621,52 @@
         }
 
 
-        // 예측 보수화 계수: 상승 예측은 조금 눌러서 과대 예측을 완화합니다.
-        const CONSERVATIVE_REMAINING_FACTOR = 0.90;
-        const CONSERVATIVE_UPSIDE_FACTOR = 0.85;
-        const CONSERVATIVE_NO_INPUT_FACTOR = 0.97;
+        // 과거 실적 범위 기반 예측 보정
+        // 계산된 예측값은 동일 유형의 과거 최저~최고 실적 범위 안에서 움직이도록 제한합니다.
+        // 단, 이미 입력된 누계가 과거 최고치를 넘은 경우에는 현재 누계보다 낮게 예측하지 않습니다.
+        function getForecastHistoryRange(historyTotals, fallbackTotal = 0) {
+            const values = (historyTotals || [])
+                .map(value => Number(value))
+                .filter(value => Number.isFinite(value) && value > 0);
+            const fallback = Math.max(Number(fallbackTotal) || 0, 0);
+            if (values.length === 0) {
+                return { values: [], min: fallback, max: fallback, average: fallback };
+            }
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+            return { values, min, max, average };
+        }
 
-        function applyConservativeForecast(rawPredictedTotal, currentCumulative, averageTotalSales, isComplete) {
-            let predicted = Number(rawPredictedTotal) || 0;
+        function applyHistoricalRangeForecast(rawPredictedTotal, currentCumulative, historyTotals, isComplete, fallbackTotal = 0) {
             const current = Math.max(Number(currentCumulative) || 0, 0);
-            const avg = Math.max(Number(averageTotalSales) || 0, 0);
+            const range = getForecastHistoryRange(historyTotals, fallbackTotal);
+            let predicted = Number(rawPredictedTotal);
 
-            if (isComplete) return Math.max(predicted, current);
-
-            if (current <= 0) {
-                return avg > 0 ? Math.max(avg * CONSERVATIVE_NO_INPUT_FACTOR, 0) : predicted;
+            if (!Number.isFinite(predicted) || predicted <= 0) {
+                predicted = range.average > 0 ? range.average : Math.max(current, Number(fallbackTotal) || 0);
             }
 
-            // 남은 예상분을 90%만 반영해서 과대 추정을 완화합니다.
-            if (predicted > current) {
-                predicted = current + ((predicted - current) * CONSERVATIVE_REMAINING_FACTOR);
-            }
+            // 모든 실적이 입력된 경우에는 예측값이 아니라 실제 누계를 최종값으로 사용합니다.
+            if (isComplete) return current > 0 ? current : predicted;
 
-            // 과거 평균보다 높게 산출된 부분은 85%만 반영합니다.
-            if (avg > 0 && predicted > avg) {
-                predicted = avg + ((predicted - avg) * CONSERVATIVE_UPSIDE_FACTOR);
-            }
+            // 과거 모수가 없으면 현재 누계보다 낮지 않게만 보정합니다.
+            if (range.values.length === 0) return Math.max(predicted, current);
 
-            return Math.max(predicted, current);
+            const lowerBound = Math.max(range.min, current);
+            const upperBound = Math.max(range.max, current);
+            return Math.min(Math.max(predicted, lowerBound), upperBound);
+        }
+
+        // 기존 호출부 호환용 함수명 유지
+        function applyConservativeForecast(rawPredictedTotal, currentCumulative, averageTotalSales, isComplete, historyTotals = []) {
+            return applyHistoricalRangeForecast(
+                rawPredictedTotal,
+                currentCumulative,
+                historyTotals,
+                isComplete,
+                averageTotalSales
+            );
         }
 
         function formatDateLocal(date) {
@@ -3544,6 +3752,7 @@
             else if(currentAnalysisMode === 'closing') badgeEl.innerText = "AI 마감가중";
 
             buildInputFormElements();
+            ensureDailyInputSection();
             buildArchiveFormElements();
             runAnalyticsAndRender();
 
@@ -3582,6 +3791,7 @@
         // 🆕 오늘 매출 누적 기입란 조형 함수
         function buildInputFormElements() {
             const container = document.getElementById('inputs-grid-container');
+            if (!container) return;
             container.innerHTML = '';
             SLOTS.forEach(slot => {
                 const box = document.createElement('div');
@@ -3597,6 +3807,20 @@
                 `;
                 container.appendChild(box);
             });
+        }
+
+        function ensureDailyInputSection() {
+            const section = document.getElementById('daily-input-section');
+            if (section) {
+                section.hidden = false;
+                section.style.display = 'block';
+                section.style.visibility = 'visible';
+                section.style.opacity = '1';
+            }
+            const container = document.getElementById('inputs-grid-container');
+            if (container && container.children.length !== SLOTS.length) {
+                buildInputFormElements();
+            }
         }
 
         // 🆕 과거 아카이브 실적 신규 적립 폼 조형 함수
@@ -3701,7 +3925,7 @@
                     }
                 });
 
-                let predictedTotal = applyConservativeForecast(todaySum || dailyTarget, todaySum, dailyTarget, activeKeys.length === SLOT_KEYS.length);
+                let predictedTotal = applyConservativeForecast(todaySum || dailyTarget, todaySum, dailyTarget, activeKeys.length === SLOT_KEYS.length, []);
                 const predictionTrendLine = {};
                 SLOT_KEYS.forEach(key => {
                     predictionTrendLine[key] = predictedTotal * avgSingleRatios[key];
@@ -3709,8 +3933,9 @@
 
                 return {
                     processedDays: [], avgSingleRatios, avgCumulativeValues, averageTotalSales,
+                    historicalTotals: [], historicalMinTotal: dailyTarget, historicalMaxTotal: dailyTarget,
                     todaySum, todayInputs, activeKeys, lastInputKey: null, predictedTotal,
-                    predictionTrendLine, todayCumulativeList: todayInputs, basisMsg: "아카이브가 현재 비어 있습니다.",
+                    predictionTrendLine, todayCumulativeList: todayInputs, basisMsg: "아카이브가 현재 비어 있어 설정 목표를 기준으로 예측합니다.",
                     confidenceScore: 0, confidenceGrade: "모수 부족"
                 };
             }
@@ -3749,6 +3974,8 @@
             });
 
             const averageTotalSales = avgCumulativeValues['close'];
+            const historicalTotals = processedDays.map(day => Number(day.total) || 0).filter(value => value > 0);
+            const historicalRange = getForecastHistoryRange(historicalTotals, averageTotalSales);
             const todayInputs = {};
             const activeKeys = [];
             let todaySum = 0;
@@ -3780,10 +4007,10 @@
                     predictedTotal = activeInputsSum / activeRatiosSum;
                     const enteredCount = activeKeys.length;
                     const totalCount = SLOT_KEYS.length;
-                    predictedTotal = applyConservativeForecast(predictedTotal, todaySum, averageTotalSales, enteredCount >= totalCount);
+                    predictedTotal = applyConservativeForecast(predictedTotal, todaySum, averageTotalSales, enteredCount >= totalCount, historicalTotals);
 
                     if (enteredCount < totalCount) {
-                        basisMsg = `현재 가중 패턴 모드 데이터 기준(${filteredHistory.length}일치 기조)을 연계 적용하고 남은 예상분을 보수적으로 조정하여 오늘 예상 매출 마감을 역산 추정 중입니다.`;
+                        basisMsg = `현재 가중 패턴 모드 ${filteredHistory.length}일치의 시간대별 누적 비중으로 오늘 마감을 역산했습니다. 예측값은 과거 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 산출됩니다.`;
                     } else {
                         basisMsg = `오늘 모든 마감 매출이 기입되었습니다. 최종 일 마감 결과는 ${Math.round(predictedTotal).toLocaleString()}천원입니다.`;
                     }
@@ -3799,8 +4026,8 @@
                     }
                 });
             } else {
-                predictedTotal = applyConservativeForecast(averageTotalSales, 0, averageTotalSales, false);
-                basisMsg = "오늘 기입된 구간 실적이 없어 아카이브 가중 모드 평균값을 보수적으로 낮춰 시뮬레이션 전개선을 그립니다.";
+                predictedTotal = applyConservativeForecast(averageTotalSales, 0, averageTotalSales, false, historicalTotals);
+                basisMsg = `오늘 기입된 구간 실적이 없어 선택 모드의 과거 평균 ${Math.round(averageTotalSales).toLocaleString()}천원을 기준으로 표시합니다. 과거 범위는 ${Math.round(historicalRange.min).toLocaleString()}천원~${Math.round(historicalRange.max).toLocaleString()}천원입니다.`;
                 SLOT_KEYS.forEach(key => {
                     predictionTrendLine[key] = avgCumulativeValues[key];
                 });
@@ -3814,6 +4041,7 @@
 
             return {
                 processedDays, avgSingleRatios, avgCumulativeValues, averageTotalSales,
+                historicalTotals, historicalMinTotal: historicalRange.min, historicalMaxTotal: historicalRange.max,
                 todaySum, todayInputs, activeKeys, lastInputKey, predictedTotal,
                 predictionTrendLine, todayCumulativeList: todayInputs, basisMsg,
                 confidenceScore, confidenceGrade
@@ -5362,6 +5590,7 @@
             const processedRows = sourceRows.filter(row => getMonthlyRowTotal(row) > 0);
             const totals = processedRows.map(row => getMonthlyRowTotal(row)).filter(v => v > 0);
             const averageTotalSales = totals.length > 0 ? totals.reduce((sum, v) => sum + v, 0) / totals.length : monthlyTarget;
+            const historicalRange = getForecastHistoryRange(totals, averageTotalSales);
 
             const currentDailyValues = {};
             const activeIndexes = [];
@@ -5396,7 +5625,7 @@
             if (currentCumulative > 0 && currentAvgCumRatio > 0.0001) {
                 predictedTotal = currentCumulative / currentAvgCumRatio;
             }
-            predictedTotal = applyConservativeForecast(predictedTotal, currentCumulative, averageTotalSales, lastInputIndex >= monthlyBusinessDays);
+            predictedTotal = applyConservativeForecast(predictedTotal, currentCumulative, averageTotalSales, lastInputIndex >= monthlyBusinessDays, totals);
 
             const predictedCumLine = {};
             const averageCumLine = {};
@@ -5435,17 +5664,20 @@
             const specialSummary = getMonthlySpecialDaySummary();
             let basisMsg = '';
             if (lastInputIndex === 0) {
-                basisMsg = `이번달 입력 실적이 없어 과거 ${processedRows.length}개월 평균 월마감을 보수적으로 낮춘 ${Math.round(predictedTotal).toLocaleString()}천원을 기준선으로 표시합니다. AI 학습 보정값은 ${specialSummary.summaryText}입니다.`;
+                basisMsg = `이번달 입력 실적이 없어 과거 ${processedRows.length}개월 평균 월마감 ${Math.round(predictedTotal).toLocaleString()}천원을 기준선으로 표시합니다. 과거 월합계 범위는 ${Math.round(historicalRange.min).toLocaleString()}천원~${Math.round(historicalRange.max).toLocaleString()}천원이며, 학습 보정값은 ${specialSummary.summaryText}입니다.`;
             } else {
                 const ratioPct = (currentAvgCumRatio * 100).toFixed(1);
                 const lastDateLabel = getMonthlyBusinessDateLabel(lastInputIndex);
-                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 아카이브에서 학습한 금요일/월마감 특수일 보정 누적비중 ${ratioPct}%를 역산한 뒤 남은 예상분을 보수적으로 조정해 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
+                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 금요일/월마감 특수일 보정 누적비중 ${ratioPct}%를 역산하고, 과거 월합계 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
                 if (hasMiddleGap) basisMsg += ' 중간 영업일 공란이 있어 실제 월 누계가 낮게 계산될 수 있습니다.';
             }
 
             return {
                 processedRows,
                 averageTotalSales,
+                historicalTotals: totals,
+                historicalMinTotal: historicalRange.min,
+                historicalMaxTotal: historicalRange.max,
                 currentDailyValues,
                 activeIndexes,
                 lastInputIndex,
@@ -5893,23 +6125,39 @@
         }
 
 
-        // 숫자 입력값이 이미 콤마 포맷과 같아도 데이터가 갱신되도록 보정합니다.
+        // 숫자 입력값이 이미 콤마 포맷과 같아도 데이터가 갱신되고, 입력 포커스/커서를 유지하도록 보정합니다.
         handleNumericInputWithCommas = function(inputEl, callback) {
-            const selectionStart = inputEl.selectionStart;
+            const selectionStart = Number.isFinite(inputEl.selectionStart) ? inputEl.selectionStart : inputEl.value.length;
             const originalValue = inputEl.value;
+            const digitsBeforeCursor = originalValue.slice(0, selectionStart).replace(/[^0-9]/g, '').length;
             const digits = originalValue.replace(/[^0-9]/g, '');
             const formatted = formatNumber(digits);
 
             if (originalValue !== formatted) {
                 inputEl.value = formatted;
-                const diff = formatted.length - originalValue.length;
-                let newPos = selectionStart;
-                if (diff > 0) newPos = selectionStart + diff;
-                else if (diff < 0) newPos = Math.max(0, selectionStart + diff);
-                inputEl.setSelectionRange(newPos, newPos);
+            }
+
+            let newPos = formatted.length;
+            if (digitsBeforeCursor === 0) {
+                newPos = 0;
+            } else {
+                let seenDigits = 0;
+                for (let idx = 0; idx < formatted.length; idx++) {
+                    if (/\d/.test(formatted[idx])) seenDigits += 1;
+                    if (seenDigits >= digitsBeforeCursor) {
+                        newPos = idx + 1;
+                        break;
+                    }
+                }
             }
 
             if (callback) callback(digits === '' ? '' : Number(digits));
+
+            requestAnimationFrame(() => {
+                if (document.activeElement === inputEl) {
+                    try { inputEl.setSelectionRange(newPos, newPos); } catch (error) {}
+                }
+            });
         };
 
         const __hanwhaOriginalOnload = window.onload;
@@ -5947,6 +6195,7 @@
                 }
             });
 
+            if (tabId === 'dashboard') ensureDailyInputSection();
             runAnalyticsAndRender();
             if (tabId === 'month' || tabId === 'history') runMonthlyAnalyticsAndRender();
         };
@@ -6885,9 +7134,414 @@
         window.onload = function() {
             if (typeof __holidayOriginalOnload === 'function') __holidayOriginalOnload();
             initMonthlyHolidayModule();
+            ensureDailyInputSection();
             initFirebaseRealtimeSync();
         };
 
-    </script>
+    
+
+        /* =========================================================
+           🆕 월마감 예측용 보장성 시간대별 실적
+           ========================================================= */
+        let monthlyHourlySelectedDate = '';
+
+        function getBusinessDayNumberFromDate(dateText) {
+            const d = parseYMDDate(dateText);
+            if (!d) return 1;
+            const monthId = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const { year, month } = parseMonthIdParts(monthId);
+            let dayNo = 0;
+            for (let dateNo = 1; dateNo <= d.getDate(); dateNo++) {
+                const cur = new Date(year, month - 1, dateNo);
+                if (cur.getDay() !== 0 && cur.getDay() !== 6) dayNo += 1;
+            }
+            return Math.max(dayNo, 1);
+        }
+
+        function getBusinessDaysInMonthFromDate(dateText) {
+            const d = parseYMDDate(dateText);
+            if (!d) return monthlyBusinessDays || 22;
+            const monthId = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const { year, month } = parseMonthIdParts(monthId);
+            const lastDate = new Date(year, month, 0).getDate();
+            let count = 0;
+            for (let dateNo = 1; dateNo <= lastDate; dateNo++) {
+                const cur = new Date(year, month - 1, dateNo);
+                if (cur.getDay() !== 0 && cur.getDay() !== 6) count += 1;
+            }
+            return Math.min(Math.max(count, 1), MONTHLY_MAX_DAYS);
+        }
+
+        function getMonthlyHourlyAvailableDates(stats) {
+            const items = [];
+            const seen = new Set();
+            const add = (dateText, label, source, dayNo, row = null) => {
+                if (!dateText || seen.has(dateText)) return;
+                if (!parseYMDDate(dateText)) return;
+                seen.add(dateText);
+                items.push({ date: dateText, label, source, dayNo, row });
+            };
+
+            for (let dayNo = 1; dayNo <= monthlyBusinessDays; dayNo++) {
+                const key = `bd${dayNo}`;
+                const dateText = monthlyBusinessDateMap && monthlyBusinessDateMap[key] ? monthlyBusinessDateMap[key] : '';
+                const dateLabel = getMonthlyBusinessDateLabel(dayNo);
+                add(dateText, `${dateText} · 이번달 ${dateLabel || `${dayNo}번째`}`, 'current', dayNo, null);
+            }
+
+            (monthlyHistoricalData || []).forEach(row => {
+                const workdays = clampMonthlyWorkdays(row.workdays);
+                for (let dayNo = 1; dayNo <= workdays; dayNo++) {
+                    const key = `bd${dayNo}`;
+                    const dateText = row.dateMap && row.dateMap[key] ? row.dateMap[key] : '';
+                    const dateLabel = getMonthlyDateLabelFromMap(dayNo, row.dateMap, row.month, workdays);
+                    const val = getMonthlyDayValue(row, dayNo);
+                    const valueText = val !== null ? ` · ${Number(val).toLocaleString()}천` : '';
+                    add(dateText, `${dateText} · ${row.month || ''} ${dateLabel || `${dayNo}번째`}${valueText}`, 'archive', dayNo, row);
+                }
+            });
+
+            return items.sort((a, b) => b.date.localeCompare(a.date));
+        }
+
+        function setMonthlyHourlyDefaultDate(stats) {
+            const input = document.getElementById('month-hourly-date-input');
+            const available = getMonthlyHourlyAvailableDates(stats);
+            const currentValid = monthlyHourlySelectedDate && parseYMDDate(monthlyHourlySelectedDate);
+            if (!currentValid) {
+                const nextDayNo = Math.min(Math.max((stats && stats.lastInputIndex ? stats.lastInputIndex + 1 : 1), 1), monthlyBusinessDays || 1);
+                const currentKey = `bd${nextDayNo}`;
+                monthlyHourlySelectedDate = (monthlyBusinessDateMap && monthlyBusinessDateMap[currentKey]) || (available[0] ? available[0].date : formatDateToYMD(new Date()));
+            }
+            if (input && input.value !== monthlyHourlySelectedDate) input.value = monthlyHourlySelectedDate;
+        }
+
+        function buildMonthlyHourlyDateOptions(stats) {
+            const datalist = document.getElementById('month-hourly-date-list');
+            if (!datalist) return;
+            setMonthlyHourlyDefaultDate(stats);
+            const available = getMonthlyHourlyAvailableDates(stats);
+            datalist.innerHTML = '';
+            available.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.date;
+                opt.label = item.label;
+                datalist.appendChild(opt);
+            });
+        }
+
+        function findMonthlyHourlyDateContext(dateText, stats) {
+            const targetDate = dateText && parseYMDDate(dateText) ? dateText : monthlyHourlySelectedDate;
+            const learnedPattern = stats && stats.learnedSpecialPattern ? stats.learnedSpecialPattern : learnMonthlySpecialPattern(monthlyHistoricalData || []);
+
+            for (let dayNo = 1; dayNo <= monthlyBusinessDays; dayNo++) {
+                const key = `bd${dayNo}`;
+                const mapped = monthlyBusinessDateMap && monthlyBusinessDateMap[key] ? monthlyBusinessDateMap[key] : '';
+                if (mapped === targetDate) {
+                    const actualDaily = stats.currentDailyValues && stats.currentDailyValues[key] !== null ? Number(stats.currentDailyValues[key]) : null;
+                    const expectedDaily = Math.max(Number(stats.expectedDailyLine && stats.expectedDailyLine[key]) || 0, 0);
+                    const meta = stats.specialDayMeta && stats.specialDayMeta[key] ? stats.specialDayMeta[key] : getMonthlySpecialDayMeta(dayNo, learnedPattern);
+                    return {
+                        date: targetDate,
+                        dayNo,
+                        month: currentMonthId,
+                        workdays: monthlyBusinessDays,
+                        row: null,
+                        source: 'current',
+                        sourceText: '이번달',
+                        dailyAmount: actualDaily !== null ? actualDaily : expectedDaily,
+                        isActual: actualDaily !== null,
+                        meta,
+                        dateLabel: getMonthlyBusinessDateLabel(dayNo)
+                    };
+                }
+            }
+
+            for (const row of (monthlyHistoricalData || [])) {
+                const workdays = clampMonthlyWorkdays(row.workdays);
+                for (let dayNo = 1; dayNo <= workdays; dayNo++) {
+                    const key = `bd${dayNo}`;
+                    const mapped = row.dateMap && row.dateMap[key] ? row.dateMap[key] : '';
+                    if (mapped === targetDate) {
+                        const val = getMonthlyDayValue(row, dayNo);
+                        const rowTotal = getMonthlyRowTotal(row);
+                        const fallbackDaily = rowTotal > 0 ? rowTotal / Math.max(workdays, 1) : (stats.requiredDailyAverage || 0);
+                        const meta = getMonthlySpecialDayMetaForMonth(dayNo, workdays, row.month, learnedPattern, null, row.dateMap);
+                        return {
+                            date: targetDate,
+                            dayNo,
+                            month: row.month,
+                            workdays,
+                            row,
+                            source: 'archive',
+                            sourceText: `${row.month || '과거월'} 아카이브`,
+                            dailyAmount: val !== null ? Number(val) : fallbackDaily,
+                            isActual: val !== null,
+                            meta,
+                            dateLabel: getMonthlyDateLabelFromMap(dayNo, row.dateMap, row.month, workdays)
+                        };
+                    }
+                }
+            }
+
+            const fallbackDayNo = getBusinessDayNumberFromDate(targetDate);
+            const fallbackWorkdays = getBusinessDaysInMonthFromDate(targetDate);
+            const d = parseYMDDate(targetDate);
+            const monthId = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : currentMonthId;
+            const meta = getMonthlySpecialDayMetaForMonth(fallbackDayNo, fallbackWorkdays, monthId, learnedPattern, null, null);
+            const currentEquivalent = Math.min(Math.max(fallbackDayNo, 1), monthlyBusinessDays || 1);
+            const expected = stats.expectedDailyLine && stats.expectedDailyLine[`bd${currentEquivalent}`]
+                ? Number(stats.expectedDailyLine[`bd${currentEquivalent}`])
+                : Math.max(Number(stats.requiredDailyAverage) || Number(monthlyTarget) / Math.max(monthlyBusinessDays || 1, 1), 0);
+            return {
+                date: targetDate,
+                dayNo: fallbackDayNo,
+                month: monthId,
+                workdays: fallbackWorkdays,
+                row: null,
+                source: 'fallback',
+                sourceText: '선택 날짜 기준 추정',
+                dailyAmount: expected,
+                isActual: false,
+                meta,
+                dateLabel: d ? `${d.getMonth() + 1}/${d.getDate()}(${getWeekdayKorean(d)})` : ''
+            };
+        }
+
+        function hashMonthlyHourlyText(text) {
+            // 같은 날짜는 항상 같은 모양을 유지하면서 날짜가 달라지면 다른 값을 만드는 고정 시드입니다.
+            let hash = 2166136261;
+            const source = String(text || '');
+            for (let i = 0; i < source.length; i++) {
+                hash ^= source.charCodeAt(i);
+                hash = Math.imul(hash, 16777619);
+            }
+            return hash >>> 0;
+        }
+
+        function getMonthlyHourlySeededUnit(seed, salt) {
+            // Math.random()을 사용하지 않아 새로고침해도 동일 날짜의 비율이 바뀌지 않습니다.
+            let value = (Number(seed) + Math.imul(Number(salt) + 1, 0x9e3779b1)) >>> 0;
+            value ^= value << 13;
+            value ^= value >>> 17;
+            value ^= value << 5;
+            return (value >>> 0) / 4294967295;
+        }
+
+        function getMonthlyHourlyRowRatioProfile(row) {
+            const ratios = {};
+            const close = row && row.hourly ? (Number(row.hourly.close || row.hourly['close']) || 0) : 0;
+            let previous = 0;
+
+            SLOT_KEYS.forEach((slotKey, idx) => {
+                let ratio;
+                if (slotKey === 'close') {
+                    ratio = 1;
+                } else {
+                    const raw = row && row.hourly ? Number(row.hourly[slotKey]) : NaN;
+                    ratio = close > 0 && !isNaN(raw) ? raw / close : ((idx + 1) / SLOT_KEYS.length);
+                }
+                ratio = Math.min(Math.max(Number(ratio) || 0, previous), 1);
+                ratios[slotKey] = ratio;
+                previous = ratio;
+            });
+            ratios.close = 1;
+            return ratios;
+        }
+
+        function buildDateVariedMonthlyHourlyRatios(baseRatios, context, preferredType, rowProfiles) {
+            const seedText = [
+                context && context.date ? context.date : '',
+                context && context.month ? context.month : '',
+                context && context.dayNo ? context.dayNo : '',
+                preferredType || 'weekday',
+                Math.round(Number(context && context.dailyAmount) || 0)
+            ].join('|');
+            const seed = hashMonthlyHourlyText(seedText);
+            const profiles = Array.isArray(rowProfiles) ? rowProfiles : [];
+            const selectedA = profiles.length > 0 ? profiles[seed % profiles.length] : null;
+            const selectedB = profiles.length > 1 ? profiles[(Math.floor(seed / Math.max(profiles.length, 1)) + 1) % profiles.length] : selectedA;
+
+            // 평균 패턴을 중심으로 실제 과거 일자 패턴을 일부 섞어 날짜마다 자연스러운 차이를 만듭니다.
+            const blendedCumulative = {};
+            SLOT_KEYS.forEach(slotKey => {
+                if (slotKey === 'close') {
+                    blendedCumulative[slotKey] = 1;
+                    return;
+                }
+                const base = Number(baseRatios[slotKey]) || 0;
+                const a = selectedA ? (Number(selectedA[slotKey]) || base) : base;
+                const b = selectedB ? (Number(selectedB[slotKey]) || base) : base;
+                // 날짜별 차이가 충분히 드러나도록 평균값보다 실제 과거 일자 패턴의 비중을 높입니다.
+                blendedCumulative[slotKey] = (base * 0.42) + (a * 0.40) + (b * 0.18);
+            });
+            blendedCumulative.close = 1;
+
+            // 누적비율 자체가 아니라 시간 구간별 증가분을 조정합니다.
+            // 날짜별 랜덤 변동뿐 아니라 '초반 집중형/후반 집중형' 페이스 기울기도 함께 적용해
+            // 날짜마다 눈에 띄는 차이가 생기면서도 누적값은 항상 증가하고 마감은 100%가 되게 합니다.
+            const increments = [];
+            let previous = 0;
+            const isArchiveDate = !!(context && context.source === 'archive');
+            const variationStrength = isArchiveDate ? 0.24 : 0.18;
+            const paceSwing = isArchiveDate ? 0.34 : 0.27;
+            const waveStrength = isArchiveDate ? 0.11 : 0.08;
+            const paceBias = (getMonthlyHourlySeededUnit(seed, 101) - 0.5) * 2 * paceSwing;
+            const wavePhase = getMonthlyHourlySeededUnit(seed, 203) * Math.PI * 2;
+
+            SLOT_KEYS.forEach((slotKey, idx) => {
+                const cumulative = slotKey === 'close'
+                    ? 1
+                    : Math.min(Math.max(Number(blendedCumulative[slotKey]) || 0, previous), 1);
+                let increment = Math.max(cumulative - previous, 0.0005);
+
+                const randomUnit = getMonthlyHourlySeededUnit(seed, idx + 17);
+                const randomFactor = 1 + ((randomUnit - 0.5) * 2 * variationStrength * (slotKey === 'close' ? 0.75 : 1));
+                const position = idx / Math.max(SLOT_KEYS.length - 1, 1);
+                const paceFactor = 1 + (paceBias * (1 - (2 * position)));
+                const waveFactor = 1 + (Math.sin(wavePhase + ((idx + 1) * 1.29)) * waveStrength * (slotKey === 'close' ? 0.65 : 1));
+                const factor = Math.min(Math.max(randomFactor * paceFactor * waveFactor, 0.45), 1.65);
+
+                increment *= factor;
+                increments.push(increment);
+                previous = cumulative;
+            });
+
+            const incrementSum = increments.reduce((sum, value) => sum + value, 0) || 1;
+            const variedRatios = {};
+            let running = 0;
+            SLOT_KEYS.forEach((slotKey, idx) => {
+                running += increments[idx] / incrementSum;
+                variedRatios[slotKey] = slotKey === 'close' ? 1 : Math.min(Math.max(running, 0), 0.999);
+            });
+            variedRatios.close = 1;
+            return variedRatios;
+        }
+
+        function getHourlyRatioProfileForMonthlyContext(context) {
+            const meta = context && context.meta ? context.meta : null;
+            let preferredType = 'weekday';
+            if (meta && meta.isClosing) preferredType = 'closing';
+            else if (meta && meta.isFriday) preferredType = 'friday';
+
+            let rows = historicalData.filter(row => row.type === preferredType && row.hourly && Number(row.hourly.close) > 0);
+            if (rows.length === 0 && preferredType !== 'weekday') {
+                rows = historicalData.filter(row => row.type === 'weekday' && row.hourly && Number(row.hourly.close) > 0);
+            }
+            if (rows.length === 0) rows = historicalData.filter(row => row.hourly && Number(row.hourly.close) > 0);
+
+            const rowProfiles = rows.map(getMonthlyHourlyRowRatioProfile);
+            const baseRatios = {};
+            SLOT_KEYS.forEach((slotKey, idx) => {
+                const values = rowProfiles
+                    .map(profile => Number(profile[slotKey]))
+                    .filter(value => !isNaN(value));
+                baseRatios[slotKey] = values.length > 0
+                    ? values.reduce((sum, value) => sum + value, 0) / values.length
+                    : ((idx + 1) / SLOT_KEYS.length);
+            });
+            baseRatios.close = 1;
+
+            // 당일 아카이브에 정확히 같은 날짜의 시간대별 원본이 있으면 그 실제 비율을 우선 사용합니다.
+            const exactRow = context && context.date
+                ? rows.find(row => String(row.date || '') === String(context.date))
+                : null;
+            if (exactRow) {
+                return {
+                    ratios: getMonthlyHourlyRowRatioProfile(exactRow),
+                    preferredType,
+                    sampleCount: rows.length,
+                    meta,
+                    exactDateProfile: true,
+                    dateVariationApplied: false
+                };
+            }
+
+            const ratios = buildDateVariedMonthlyHourlyRatios(baseRatios, context || {}, preferredType, rowProfiles);
+            return {
+                ratios,
+                preferredType,
+                sampleCount: rows.length,
+                meta,
+                exactDateProfile: false,
+                dateVariationApplied: true
+            };
+        }
+
+        function handleMonthlyHourlyDateChange(value) {
+            monthlyHourlySelectedDate = value || '';
+            runMonthlyAnalyticsAndRender();
+        }
+
+        function renderMonthlyHourlyEstimate(stats) {
+            const summaryEl = document.getElementById('monthly-hourly-summary');
+            const gridEl = document.getElementById('monthly-hourly-grid');
+            const briefEl = document.getElementById('monthly-hourly-brief');
+            if (!summaryEl || !gridEl || !briefEl || !stats) return;
+
+            buildMonthlyHourlyDateOptions(stats);
+            const context = findMonthlyHourlyDateContext(monthlyHourlySelectedDate, stats);
+            const profile = getHourlyRatioProfileForMonthlyContext(context);
+            const typeTextMap = { weekday: '평일 패턴', friday: '금요일 패턴', closing: '월마감일 패턴' };
+            const sourceTypeText = typeTextMap[profile.preferredType] || '전체 패턴';
+            const metaLabel = profile.meta && profile.meta.labelText ? profile.meta.labelText : '일반일';
+            const baseDailyAmount = Math.max(Number(context.dailyAmount) || 0, 0);
+            const requiredDailyAmount = Math.max(Number(stats.requiredDailyAverage) || 0, 0);
+            const basisText = context.isActual ? '해당 날짜 실제 일마감 기준' : '월마감 보정표준 일마감 기준';
+            const displayDateLabel = context.dateLabel || context.date;
+
+            summaryEl.innerHTML = `
+                <div class="monthly-hourly-summary-box">
+                    <div class="monthly-hourly-summary-label">조회 날짜</div>
+                    <div class="monthly-hourly-summary-value">${context.date}${displayDateLabel ? ` · ${displayDateLabel}` : ''}</div>
+                </div>
+                <div class="monthly-hourly-summary-box">
+                    <div class="monthly-hourly-summary-label">기준 일마감</div>
+                    <div class="monthly-hourly-summary-value text-orange">${Math.round(baseDailyAmount).toLocaleString()}천원</div>
+                </div>
+
+            `;
+
+            gridEl.innerHTML = '';
+            SLOT_KEYS.forEach(slotKey => {
+                const slot = SLOTS.find(s => s.key === slotKey);
+                const ratio = profile.ratios[slotKey] || 0;
+                const estimated = Math.round(baseDailyAmount * ratio);
+                const needed = Math.round(requiredDailyAmount * ratio);
+                const label = slot ? slot.label.replace(' 누적', '') : slotKey;
+                const item = document.createElement('div');
+                item.className = 'monthly-hourly-item';
+                item.innerHTML = `
+                    <div class="monthly-hourly-item-head">
+                        <span class="monthly-hourly-time">${label}</span>
+                        <span class="monthly-hourly-ratio">${(ratio * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="monthly-hourly-value">${estimated.toLocaleString()}천원</div>
+                    <div class="monthly-hourly-bar-track"><div class="monthly-hourly-bar" style="width:${Math.min(ratio * 100, 100)}%;"></div></div>
+                    <div class="value-sub" style="text-align:right; margin-top:6px; font-weight:800; color:var(--text-secondary);">목표 필요 누적 ${needed.toLocaleString()}천</div>
+                `;
+                gridEl.appendChild(item);
+            });
+
+            const comparison = baseDailyAmount - requiredDailyAmount;
+            const comparisonText = comparison >= 0
+                ? `월 목표 필요 일평균보다 ${Math.round(comparison).toLocaleString()}천원 높게 잡힌 페이스입니다.`
+                : `월 목표 필요 일평균보다 ${Math.abs(Math.round(comparison)).toLocaleString()}천원 부족한 페이스입니다.`;
+            briefEl.innerHTML = '';
+            briefEl.style.display = 'none';
+        }
+
+        const __monthlyHourlyOriginalRunMonthlyAnalyticsAndRender = runMonthlyAnalyticsAndRender;
+        runMonthlyAnalyticsAndRender = function() {
+            __monthlyHourlyOriginalRunMonthlyAnalyticsAndRender();
+            try {
+                const stats = calculateMonthlyStats();
+                renderMonthlyHourlyEstimate(stats);
+            } catch (err) {
+                console.warn('월마감 시간대별 실적 렌더링 실패:', err);
+            }
+        };
+
+</script>
 </body>
 </html>
