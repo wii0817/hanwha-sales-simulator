@@ -3359,8 +3359,9 @@
                         <p>실적 아카이브에 저장된 날짜별 패턴을 조회합니다.</p>
                     </div>
                     <label class="monthly-hourly-select-wrap">조회 날짜
-                        <input id="month-hourly-date-input" class="filter-select" type="date" list="month-hourly-date-list" onchange="handleMonthlyHourlyDateChange(this.value)">
-                        <datalist id="month-hourly-date-list"></datalist>
+                        <select id="month-hourly-date-input" class="filter-select" onchange="handleMonthlyHourlyDateChange(this.value)">
+                            <option value="">월별 실적 아카이브 날짜를 선택하세요</option>
+                        </select>
                     </label>
                 </div>
                 <div id="monthly-hourly-summary" class="monthly-hourly-summary"></div>
@@ -7175,31 +7176,31 @@
         }
 
         function getMonthlyHourlyAvailableDates(stats) {
+            // 월마감 예측용 월별 실적 아카이브에 실제 실적이 저장된 날짜만 노출합니다.
             const items = [];
             const seen = new Set();
-            const add = (dateText, label, source, dayNo, row = null) => {
-                if (!dateText || seen.has(dateText)) return;
-                if (!parseYMDDate(dateText)) return;
-                seen.add(dateText);
-                items.push({ date: dateText, label, source, dayNo, row });
-            };
-
-            for (let dayNo = 1; dayNo <= monthlyBusinessDays; dayNo++) {
-                const key = `bd${dayNo}`;
-                const dateText = monthlyBusinessDateMap && monthlyBusinessDateMap[key] ? monthlyBusinessDateMap[key] : '';
-                const dateLabel = getMonthlyBusinessDateLabel(dayNo);
-                add(dateText, `${dateText} · 이번달 ${dateLabel || `${dayNo}번째`}`, 'current', dayNo, null);
-            }
 
             (monthlyHistoricalData || []).forEach(row => {
                 const workdays = clampMonthlyWorkdays(row.workdays);
+                const normalizedDateMap = normalizeMonthlyBusinessDateMap(row.dateMap, row.month, workdays);
                 for (let dayNo = 1; dayNo <= workdays; dayNo++) {
+                    const value = getMonthlyDayValue(row, dayNo);
+                    if (value === null || !Number.isFinite(Number(value))) continue;
+
                     const key = `bd${dayNo}`;
-                    const dateText = row.dateMap && row.dateMap[key] ? row.dateMap[key] : '';
-                    const dateLabel = getMonthlyDateLabelFromMap(dayNo, row.dateMap, row.month, workdays);
-                    const val = getMonthlyDayValue(row, dayNo);
-                    const valueText = val !== null ? ` · ${Number(val).toLocaleString()}천` : '';
-                    add(dateText, `${dateText} · ${row.month || ''} ${dateLabel || `${dayNo}번째`}${valueText}`, 'archive', dayNo, row);
+                    const dateText = normalizedDateMap[key] || '';
+                    if (!dateText || !parseYMDDate(dateText) || seen.has(dateText)) continue;
+
+                    seen.add(dateText);
+                    const dateLabel = getMonthlyDateLabelFromMap(dayNo, normalizedDateMap, row.month, workdays);
+                    items.push({
+                        date: dateText,
+                        label: `${dateText} · ${row.month || ''} ${dateLabel || `${dayNo}번째`} · ${Number(value).toLocaleString()}천`,
+                        source: 'archive',
+                        dayNo,
+                        row,
+                        dateMap: normalizedDateMap
+                    });
                 }
             });
 
@@ -7209,105 +7210,87 @@
         function setMonthlyHourlyDefaultDate(stats) {
             const input = document.getElementById('month-hourly-date-input');
             const available = getMonthlyHourlyAvailableDates(stats);
-            const currentValid = monthlyHourlySelectedDate && parseYMDDate(monthlyHourlySelectedDate);
-            if (!currentValid) {
-                const nextDayNo = Math.min(Math.max((stats && stats.lastInputIndex ? stats.lastInputIndex + 1 : 1), 1), monthlyBusinessDays || 1);
-                const currentKey = `bd${nextDayNo}`;
-                monthlyHourlySelectedDate = (monthlyBusinessDateMap && monthlyBusinessDateMap[currentKey]) || (available[0] ? available[0].date : formatDateToYMD(new Date()));
+            const availableDates = new Set(available.map(item => item.date));
+
+            if (!monthlyHourlySelectedDate || !availableDates.has(monthlyHourlySelectedDate)) {
+                monthlyHourlySelectedDate = available.length > 0 ? available[0].date : '';
             }
             if (input && input.value !== monthlyHourlySelectedDate) input.value = monthlyHourlySelectedDate;
         }
 
         function buildMonthlyHourlyDateOptions(stats) {
-            const datalist = document.getElementById('month-hourly-date-list');
-            if (!datalist) return;
-            setMonthlyHourlyDefaultDate(stats);
+            const select = document.getElementById('month-hourly-date-input');
+            if (!select) return;
+
             const available = getMonthlyHourlyAvailableDates(stats);
-            datalist.innerHTML = '';
+            const previousValue = monthlyHourlySelectedDate;
+            select.innerHTML = '';
+
+            if (available.length === 0) {
+                const emptyOption = document.createElement('option');
+                emptyOption.value = '';
+                emptyOption.textContent = '조회 가능한 월별 아카이브 날짜가 없습니다';
+                select.appendChild(emptyOption);
+                monthlyHourlySelectedDate = '';
+                select.value = '';
+                return;
+            }
+
             available.forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.date;
-                opt.label = item.label;
-                datalist.appendChild(opt);
+                opt.textContent = item.label;
+                select.appendChild(opt);
             });
+
+            const validDates = new Set(available.map(item => item.date));
+            monthlyHourlySelectedDate = validDates.has(previousValue) ? previousValue : available[0].date;
+            select.value = monthlyHourlySelectedDate;
         }
 
         function findMonthlyHourlyDateContext(dateText, stats) {
-            const targetDate = dateText && parseYMDDate(dateText) ? dateText : monthlyHourlySelectedDate;
-            const learnedPattern = stats && stats.learnedSpecialPattern ? stats.learnedSpecialPattern : learnMonthlySpecialPattern(monthlyHistoricalData || []);
+            const targetDate = dateText || monthlyHourlySelectedDate;
+            if (!targetDate) return null;
 
-            for (let dayNo = 1; dayNo <= monthlyBusinessDays; dayNo++) {
-                const key = `bd${dayNo}`;
-                const mapped = monthlyBusinessDateMap && monthlyBusinessDateMap[key] ? monthlyBusinessDateMap[key] : '';
-                if (mapped === targetDate) {
-                    const actualDaily = stats.currentDailyValues && stats.currentDailyValues[key] !== null ? Number(stats.currentDailyValues[key]) : null;
-                    const expectedDaily = Math.max(Number(stats.expectedDailyLine && stats.expectedDailyLine[key]) || 0, 0);
-                    const meta = stats.specialDayMeta && stats.specialDayMeta[key] ? stats.specialDayMeta[key] : getMonthlySpecialDayMeta(dayNo, learnedPattern);
+            const learnedPattern = stats && stats.learnedSpecialPattern
+                ? stats.learnedSpecialPattern
+                : learnMonthlySpecialPattern(monthlyHistoricalData || []);
+
+            for (const row of (monthlyHistoricalData || [])) {
+                const workdays = clampMonthlyWorkdays(row.workdays);
+                const normalizedDateMap = normalizeMonthlyBusinessDateMap(row.dateMap, row.month, workdays);
+                for (let dayNo = 1; dayNo <= workdays; dayNo++) {
+                    const key = `bd${dayNo}`;
+                    if (normalizedDateMap[key] !== targetDate) continue;
+
+                    const val = getMonthlyDayValue(row, dayNo);
+                    if (val === null || !Number.isFinite(Number(val))) return null;
+
+                    const meta = getMonthlySpecialDayMetaForMonth(
+                        dayNo,
+                        workdays,
+                        row.month,
+                        learnedPattern,
+                        null,
+                        normalizedDateMap
+                    );
                     return {
                         date: targetDate,
                         dayNo,
-                        month: currentMonthId,
-                        workdays: monthlyBusinessDays,
-                        row: null,
-                        source: 'current',
-                        sourceText: '이번달',
-                        dailyAmount: actualDaily !== null ? actualDaily : expectedDaily,
-                        isActual: actualDaily !== null,
+                        month: row.month,
+                        workdays,
+                        row,
+                        source: 'archive',
+                        sourceText: `${row.month || '과거월'} 아카이브`,
+                        dailyAmount: Number(val),
+                        isActual: true,
                         meta,
-                        dateLabel: getMonthlyBusinessDateLabel(dayNo)
+                        dateLabel: getMonthlyDateLabelFromMap(dayNo, normalizedDateMap, row.month, workdays)
                     };
                 }
             }
 
-            for (const row of (monthlyHistoricalData || [])) {
-                const workdays = clampMonthlyWorkdays(row.workdays);
-                for (let dayNo = 1; dayNo <= workdays; dayNo++) {
-                    const key = `bd${dayNo}`;
-                    const mapped = row.dateMap && row.dateMap[key] ? row.dateMap[key] : '';
-                    if (mapped === targetDate) {
-                        const val = getMonthlyDayValue(row, dayNo);
-                        const rowTotal = getMonthlyRowTotal(row);
-                        const fallbackDaily = rowTotal > 0 ? rowTotal / Math.max(workdays, 1) : (stats.requiredDailyAverage || 0);
-                        const meta = getMonthlySpecialDayMetaForMonth(dayNo, workdays, row.month, learnedPattern, null, row.dateMap);
-                        return {
-                            date: targetDate,
-                            dayNo,
-                            month: row.month,
-                            workdays,
-                            row,
-                            source: 'archive',
-                            sourceText: `${row.month || '과거월'} 아카이브`,
-                            dailyAmount: val !== null ? Number(val) : fallbackDaily,
-                            isActual: val !== null,
-                            meta,
-                            dateLabel: getMonthlyDateLabelFromMap(dayNo, row.dateMap, row.month, workdays)
-                        };
-                    }
-                }
-            }
-
-            const fallbackDayNo = getBusinessDayNumberFromDate(targetDate);
-            const fallbackWorkdays = getBusinessDaysInMonthFromDate(targetDate);
-            const d = parseYMDDate(targetDate);
-            const monthId = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : currentMonthId;
-            const meta = getMonthlySpecialDayMetaForMonth(fallbackDayNo, fallbackWorkdays, monthId, learnedPattern, null, null);
-            const currentEquivalent = Math.min(Math.max(fallbackDayNo, 1), monthlyBusinessDays || 1);
-            const expected = stats.expectedDailyLine && stats.expectedDailyLine[`bd${currentEquivalent}`]
-                ? Number(stats.expectedDailyLine[`bd${currentEquivalent}`])
-                : Math.max(Number(stats.requiredDailyAverage) || Number(monthlyTarget) / Math.max(monthlyBusinessDays || 1, 1), 0);
-            return {
-                date: targetDate,
-                dayNo: fallbackDayNo,
-                month: monthId,
-                workdays: fallbackWorkdays,
-                row: null,
-                source: 'fallback',
-                sourceText: '선택 날짜 기준 추정',
-                dailyAmount: expected,
-                isActual: false,
-                meta,
-                dateLabel: d ? `${d.getMonth() + 1}/${d.getDate()}(${getWeekdayKorean(d)})` : ''
-            };
+            return null;
         }
 
         function hashMonthlyHourlyText(text) {
@@ -7483,6 +7466,18 @@
 
             buildMonthlyHourlyDateOptions(stats);
             const context = findMonthlyHourlyDateContext(monthlyHourlySelectedDate, stats);
+            if (!context) {
+                summaryEl.innerHTML = `
+                    <div class="monthly-hourly-summary-box" style="grid-column:1/-1;">
+                        <div class="monthly-hourly-summary-label">조회 안내</div>
+                        <div class="monthly-hourly-summary-value">월마감 예측용 월별 실적 아카이브에 저장된 날짜가 없습니다.</div>
+                    </div>
+                `;
+                gridEl.innerHTML = '';
+                briefEl.innerHTML = '';
+                briefEl.style.display = 'none';
+                return;
+            }
             const profile = getHourlyRatioProfileForMonthlyContext(context);
             const typeTextMap = { weekday: '평일 패턴', friday: '금요일 패턴', closing: '월마감일 패턴' };
             const sourceTypeText = typeTextMap[profile.preferredType] || '전체 패턴';
