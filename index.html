@@ -4214,14 +4214,14 @@
                     const pct = targetGuideAtThisHour > 0 ? ((diff / targetGuideAtThisHour) * 100).toFixed(1) : '0.0';
                     
                     if (diff > 0) {
-                        diffHtml = `<div class="value-sub" style="color: var(--emerald); font-weight: bold; font-size: 10px; margin-top: 1px;">마감 목표 가이드 대비: ▲${diff.toLocaleString()}천 (+${pct}%)</div>`;
+                        diffHtml = `<div class="value-sub" style="color: var(--emerald); font-weight: bold; font-size: 10px; margin-top: 1px;">마감 목표 가이드보다 ▲${diff.toLocaleString()}천 앞섬 (+${pct}%)</div>`;
                     } else if (diff < 0) {
-                        diffHtml = `<div class="value-sub" style="color: var(--rose); font-weight: bold; font-size: 10px; margin-top: 1px;">마감 목표 가이드 대비: ▼${Math.abs(diff).toLocaleString()}천 (-${Math.abs(pct)}%)</div>`;
+                        diffHtml = `<div class="value-sub" style="color: var(--rose); font-weight: bold; font-size: 10px; margin-top: 1px;">마감 목표 가이드보다 ▼${Math.abs(diff).toLocaleString()}천 부족 (-${Math.abs(pct)}%)</div>`;
                     } else {
-                        diffHtml = `<div class="value-sub" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">마감 목표 가이드 대비: 0천 (0.0%)</div>`;
+                        diffHtml = `<div class="value-sub" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">마감 목표 가이드와 동일 (0.0%)</div>`;
                     }
                 } else {
-                    diffHtml = `<div class="value-sub" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">마감 목표 가이드 대비: -</div>`;
+                    diffHtml = `<div class="value-sub" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">마감 목표 가이드 비교: -</div>`;
                 }
 
                 const item = document.createElement('div');
@@ -5673,11 +5673,34 @@
             const adjustedShape = getMonthlyAdjustedShape(processedRows, monthlyBusinessDays, learnedSpecialPattern);
             const currentAvgCumRatio = lastInputIndex > 0 ? (adjustedShape.cumRatios[`bd${lastInputIndex}`] || getMonthlyAverageCumRatio(progress, processedRows)) : 0;
 
+            // 월마감 예상은 새 일마감 실적이 입력될 때마다 현재 누계와
+            // 해당 영업일까지의 과거 누적비중을 다시 역산해 즉시 갱신합니다.
+            // 기존처럼 과거 최저/최고값에 딱 붙여 고정하지 않고,
+            // 진행률이 높아질수록 현재 실적 페이스의 반영 비중을 키웁니다.
             let predictedTotal = averageTotalSales || monthlyTarget;
             if (currentCumulative > 0 && currentAvgCumRatio > 0.0001) {
-                predictedTotal = currentCumulative / currentAvgCumRatio;
+                const paceEstimate = currentCumulative / currentAvgCumRatio;
+                const progressWeight = Math.max(0.30, Math.min(0.92, 0.30 + (progress * 0.62)));
+                predictedTotal = (paceEstimate * progressWeight) + (averageTotalSales * (1 - progressWeight));
+
+                // 극단적인 1일치 입력 때문에 예상치가 튀는 현상만 부드럽게 완화합니다.
+                // 범위 밖 값을 강제로 같은 값으로 고정하지 않으므로, 새 실적 입력에 따라 계속 변합니다.
+                if (totals.length > 0) {
+                    const softLow = historicalRange.min * 0.85;
+                    const softHigh = historicalRange.max * 1.15;
+                    if (predictedTotal < softLow) {
+                        predictedTotal = softLow - ((softLow - predictedTotal) * 0.25);
+                    } else if (predictedTotal > softHigh) {
+                        predictedTotal = softHigh + ((predictedTotal - softHigh) * 0.25);
+                    }
+                }
             }
-            predictedTotal = applyConservativeForecast(predictedTotal, currentCumulative, averageTotalSales, lastInputIndex >= monthlyBusinessDays, totals);
+
+            if (lastInputIndex >= monthlyBusinessDays) {
+                predictedTotal = currentCumulative;
+            } else {
+                predictedTotal = Math.max(predictedTotal, currentCumulative);
+            }
 
             const predictedCumLine = {};
             const averageCumLine = {};
@@ -5753,7 +5776,7 @@
             } else {
                 const ratioPct = (currentAvgCumRatio * 100).toFixed(1);
                 const lastDateLabel = getMonthlyBusinessDateLabel(lastInputIndex);
-                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 월별 패턴과 특수일을 반영한 누적비중 ${ratioPct}%를 역산했습니다. 자동예상 전개는 현재 실제 누계 ${Math.round(currentCumulative).toLocaleString()}천원에서 이어지며, 남은 영업일 패턴을 적용해 과거 월합계 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. (${specialSummary.summaryText})`;
+                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 월별 패턴과 특수일을 반영한 누적비중 ${ratioPct}%를 역산했습니다. 자동예상 전개는 현재 실제 누계 ${Math.round(currentCumulative).toLocaleString()}천원에서 이어지며, 남은 영업일 패턴과 현재 실적 페이스를 다시 계산해 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. 새 일마감 실적을 입력할 때마다 예상값이 즉시 갱신됩니다. (${specialSummary.summaryText})`;
                 if (hasMiddleGap) basisMsg += ' 중간 영업일 공란이 있어 실제 월 누계가 낮게 계산될 수 있습니다.';
             }
 
@@ -5855,7 +5878,7 @@
                         const targetGuideCum = stats.targetGuideLine[key] || 0;
                         const diff = actualCum - targetGuideCum;
                         const sign = diff >= 0 ? '▲' : '▼';
-                        helpEl.innerHTML = `${sign} ${Math.abs(Math.round(diff)).toLocaleString()}천 vs 마감 목표 가이드${labelSuffix}`;
+                        helpEl.innerHTML = `${diff >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(diff)).toLocaleString()}천 ${diff >= 0 ? '앞섬' : '부족'} · 마감 목표 가이드${labelSuffix}`;
                         helpEl.style.color = diff >= 0 ? 'var(--emerald)' : 'var(--rose)';
                     } else {
                         helpEl.innerHTML = `예상 ${Math.round(expected).toLocaleString()}천${labelSuffix}`;
@@ -5904,7 +5927,7 @@
                         </div>
                         <div style="text-align: right; border-left: 1px solid var(--border-color); padding-left: 10px; min-width: 120px;">
                             <div class="value-sub" style="color: var(--hanwha-orange); font-weight: bold;">예상 누계: ${Math.round(expectedCum).toLocaleString()}천</div>
-                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">마감 목표 가이드 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">마감 목표 가이드 대비: -</div>'}
+                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">마감 목표 가이드보다 ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 ${diff >= 0 ? '앞섬' : '부족'} (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">마감 목표 가이드 비교: -</div>'}
                         </div>
                     </div>
                 `;
@@ -6877,7 +6900,7 @@
                         </div>
                         <div style="text-align: right; border-left: 1px solid var(--border-color); padding-left: 10px; min-width: 120px;">
                             <div class="value-sub" style="color: var(--hanwha-orange); font-weight: bold;">예상 누계: ${Math.round(expectedCum).toLocaleString()}천</div>
-                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">마감 목표 가이드 대비: ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">마감 목표 가이드 대비: -</div>'}
+                            ${isInputted ? `<div class="value-sub" style="color:${diff >= 0 ? 'var(--emerald)' : 'var(--rose)'}; font-weight: bold;">마감 목표 가이드보다 ${diff >= 0 ? '▲' : '▼'}${Math.abs(Math.round(diff)).toLocaleString()}천 ${diff >= 0 ? '앞섬' : '부족'} (${diff >= 0 ? '+' : '-'}${Math.abs(pct)}%)</div>` : '<div class="value-sub" style="color: var(--text-muted);">마감 목표 가이드 비교: -</div>'}
                         </div>
                     </div>
                 `;
