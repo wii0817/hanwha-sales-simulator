@@ -2872,9 +2872,9 @@
 
         <!-- 백업 액션 -->
         <div class="util-container">
-            <button class="btn-util" onclick="exportData()" title="오프라인 보관을 위해 파일로 저장합니다.">
+            <button class="btn-util" onclick="exportData()" title="실적 데이터를 엑셀 파일로 저장합니다.">
                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                DB 내보내기
+                엑셀 내보내기
             </button>
             <label class="btn-util cursor-pointer" title="이전에 보관해둔 파일을 적용합니다.">
                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
@@ -3376,10 +3376,11 @@
     <!-- 푸터 -->
     <footer>
         <p>© 2026 한화손보 매출 마감 시뮬레이터. 평일(금제외)/금요일/월마감일 특화 예측 필터 기동 중.</p>
-        <p style="opacity: 0.7; margin-top: 4px;">* 내부망 전용 오프라인 기기로 포맷, 브라우저 캐시 삭제 시 데이터가 소실될 수 있으므로 매주 주기적으로 <strong>[DB 내보내기]</strong> 백업을 하시기 바랍니다.</p>
+        <p style="opacity: 0.7; margin-top: 4px;">* 내부망 전용 오프라인 기기로 포맷, 브라우저 캐시 삭제 시 데이터가 소실될 수 있으므로 매주 주기적으로 <strong>[엑셀 내보내기]</strong> 백업을 하시기 바랍니다.</p>
     </footer>
 
     <!-- Firebase Realtime Database SDK: GitHub Pages 단일 HTML에서 바로 사용 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
@@ -7032,9 +7033,116 @@
         };
 
         exportData = function() {
+            if (typeof XLSX === 'undefined') {
+                showToast('엑셀 모듈을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.', 'error');
+                return;
+            }
+
             const currentHolidayInput = document.getElementById('month-holidays-input');
             if (currentHolidayInput) monthlyHolidayDatesText = currentHolidayInput.value || '';
-            const dataStr = JSON.stringify({
+
+            const typeLabels = { weekday: '평일', friday: '금요일', closing: '월마감일' };
+            const workbook = XLSX.utils.book_new();
+
+            // 1) 당일 실적 아카이브
+            const dailyRows = (historicalData || []).map(row => {
+                const output = {
+                    '날짜': row.date || '',
+                    '구분': typeLabels[row.type] || row.type || ''
+                };
+                SLOTS.forEach(slot => {
+                    output[slot.label + ' (천원)'] = Number(row.hourly && row.hourly[slot.key] || 0);
+                });
+                return output;
+            });
+            const dailySheet = XLSX.utils.json_to_sheet(dailyRows.length ? dailyRows : [{ '날짜': '', '구분': '' }]);
+            dailySheet['!cols'] = [
+                { wch: 13 }, { wch: 10 },
+                ...SLOTS.map(() => ({ wch: 18 }))
+            ];
+            XLSX.utils.book_append_sheet(workbook, dailySheet, '당일 실적 아카이브');
+
+            // 2) 오늘 입력 실적
+            const todayRows = SLOTS.map(slot => ({
+                '시간대': slot.label,
+                '누적 실적 (천원)': todayData && todayData[slot.key] !== '' ? Number(todayData[slot.key] || 0) : ''
+            }));
+            const todaySheet = XLSX.utils.json_to_sheet(todayRows);
+            todaySheet['!cols'] = [{ wch: 20 }, { wch: 20 }];
+            XLSX.utils.book_append_sheet(workbook, todaySheet, '오늘 입력 실적');
+
+            // 3) 월별 실적 아카이브 - 날짜별 세로 목록
+            const monthlyRows = [];
+            (monthlyHistoricalData || []).forEach(monthRow => {
+                let cumulative = 0;
+                const workdays = Number(monthRow.workdays || 0);
+                const dateMap = monthRow.dateMap || {};
+                for (let i = 1; i <= workdays; i++) {
+                    const key = `bd${i}`;
+                    const value = Number(monthRow.daily && monthRow.daily[key] || 0);
+                    cumulative += value;
+                    const dateText = dateMap[key] || '';
+                    let friday = '';
+                    if (dateText) {
+                        const d = new Date(dateText + 'T00:00:00');
+                        friday = !Number.isNaN(d.getTime()) && d.getDay() === 5 ? 'Y' : '';
+                    }
+                    monthlyRows.push({
+                        '기준월': monthRow.month || '',
+                        '영업일': i,
+                        '날짜': dateText,
+                        '일마감 실적 (천원)': value,
+                        '누적 실적 (천원)': cumulative,
+                        '금요일': friday
+                    });
+                }
+            });
+            const monthlySheet = XLSX.utils.json_to_sheet(monthlyRows.length ? monthlyRows : [{ '기준월': '', '영업일': '', '날짜': '', '일마감 실적 (천원)': '', '누적 실적 (천원)': '', '금요일': '' }]);
+            monthlySheet['!cols'] = [{ wch: 11 }, { wch: 9 }, { wch: 13 }, { wch: 20 }, { wch: 20 }, { wch: 9 }];
+            XLSX.utils.book_append_sheet(workbook, monthlySheet, '월별 실적 아카이브');
+
+            // 4) 이번 달 입력 실적
+            const currentRows = [];
+            let currentCumulative = 0;
+            for (let i = 1; i <= Number(monthlyBusinessDays || 0); i++) {
+                const key = `bd${i}`;
+                const raw = currentMonthData ? currentMonthData[key] : '';
+                const hasValue = raw !== '' && raw !== null && raw !== undefined;
+                const value = hasValue ? Number(raw || 0) : '';
+                if (hasValue) currentCumulative += Number(value || 0);
+                const dateText = monthlyBusinessDateMap && monthlyBusinessDateMap[key] ? monthlyBusinessDateMap[key] : '';
+                currentRows.push({
+                    '기준월': currentMonthId || '',
+                    '영업일': i,
+                    '날짜': dateText,
+                    '일마감 실적 (천원)': value,
+                    '누적 실적 (천원)': hasValue ? currentCumulative : ''
+                });
+            }
+            const currentSheet = XLSX.utils.json_to_sheet(currentRows);
+            currentSheet['!cols'] = [{ wch: 11 }, { wch: 9 }, { wch: 13 }, { wch: 20 }, { wch: 20 }];
+            XLSX.utils.book_append_sheet(workbook, currentSheet, '이번 달 입력 실적');
+
+            // 5) 주요 설정
+            const settingsRows = [
+                ['항목', '값'],
+                ['당일 마감 목표 (천원)', Number(dailyTarget || 0)],
+                ['당일 분석 모드', typeLabels[currentAnalysisMode] || currentAnalysisMode || ''],
+                ['월마감 목표 (천원)', Number(monthlyTarget || 0)],
+                ['이번 달 기준월', currentMonthId || ''],
+                ['이번 달 영업일 수', Number(monthlyBusinessDays || 0)],
+                ['금요일 가중치 (%)', Number(monthlyFridayBoostPct || 0)],
+                ['월마감 가중치 (%)', Number(monthlyClosingBoostPct || 0)],
+                ['월마감 적용 일수', Number(monthlyClosingWindowDays || 0)],
+                ['공휴일', monthlyHolidayDatesText || ''],
+                ['내보낸 시각', new Date().toLocaleString('ko-KR')]
+            ];
+            const settingsSheet = XLSX.utils.aoa_to_sheet(settingsRows);
+            settingsSheet['!cols'] = [{ wch: 25 }, { wch: 35 }];
+            XLSX.utils.book_append_sheet(workbook, settingsSheet, '설정');
+
+            // 원본 데이터도 숨김 시트에 함께 보관
+            const rawBackup = JSON.stringify({
                 historicalData,
                 todayData,
                 dailyTarget,
@@ -7050,14 +7158,18 @@
                 monthlyFridayDayNumbersText,
                 monthlyBusinessDateMap,
                 monthlyHolidayDatesText
-            }, null, 2);
-            const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-            const fileName = `hanwha_sales_database_${new Date().toISOString().split('T')[0]}.json`;
-            const link = document.createElement('a');
-            link.setAttribute('href', dataUri);
-            link.setAttribute('download', fileName);
-            link.click();
-            showToast('당일/월마감/공휴일 설정 데이터가 통합 백업되었습니다.');
+            });
+            const rawSheet = XLSX.utils.aoa_to_sheet([['한화손보 매출 마감 시뮬레이터 원본 백업'], [rawBackup]]);
+            rawSheet['!cols'] = [{ wch: 30 }];
+            XLSX.utils.book_append_sheet(workbook, rawSheet, '_원본백업');
+            if (workbook.Workbook && workbook.Workbook.Sheets) {
+                const rawMeta = workbook.Workbook.Sheets.find(sheet => sheet.name === '_원본백업');
+                if (rawMeta) rawMeta.Hidden = 1;
+            }
+
+            const fileName = `한화손보_매출마감_데이터_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(workbook, fileName, { compression: true });
+            showToast('당일·월마감 실적 데이터를 엑셀 파일로 저장했습니다.');
         };
 
         importData = function(event) {
