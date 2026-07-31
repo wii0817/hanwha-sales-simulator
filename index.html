@@ -3627,20 +3627,39 @@
 
 
         // 과거 실적 범위 기반 예측 보정
-        // 계산된 예측값은 동일 유형의 과거 최저~최고 실적 범위 안에서 움직이도록 제한합니다.
-        // 단, 이미 입력된 누계가 과거 최고치를 넘은 경우에는 현재 누계보다 낮게 예측하지 않습니다.
+        // 계산된 예측값은 동일 유형의 과거 분포 범위 안에서 움직이도록 제한합니다.
+        // 너무 평균만 따라가면 예측이 낙관적으로 치우치므로, 중간값/하위사분위도 함께 참고합니다.
+        function getHistoricalPercentile(values, percentile) {
+            const nums = (values || [])
+                .map(value => Number(value))
+                .filter(value => Number.isFinite(value) && value > 0)
+                .sort((a, b) => a - b);
+            if (nums.length === 0) return 0;
+            const p = Math.max(0, Math.min(1, Number(percentile) || 0));
+            const rank = (nums.length - 1) * p;
+            const low = Math.floor(rank);
+            const high = Math.ceil(rank);
+            if (low === high) return nums[low];
+            const weight = rank - low;
+            return nums[low] * (1 - weight) + nums[high] * weight;
+        }
+
         function getForecastHistoryRange(historyTotals, fallbackTotal = 0) {
             const values = (historyTotals || [])
                 .map(value => Number(value))
-                .filter(value => Number.isFinite(value) && value > 0);
+                .filter(value => Number.isFinite(value) && value > 0)
+                .sort((a, b) => a - b);
             const fallback = Math.max(Number(fallbackTotal) || 0, 0);
             if (values.length === 0) {
-                return { values: [], min: fallback, max: fallback, average: fallback };
+                return { values: [], min: fallback, max: fallback, average: fallback, median: fallback, p25: fallback, p75: fallback };
             }
-            const min = Math.min(...values);
-            const max = Math.max(...values);
+            const min = values[0];
+            const max = values[values.length - 1];
             const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-            return { values, min, max, average };
+            const median = getHistoricalPercentile(values, 0.5);
+            const p25 = getHistoricalPercentile(values, 0.25);
+            const p75 = getHistoricalPercentile(values, 0.75);
+            return { values, min, max, average, median, p25, p75 };
         }
 
         function applyHistoricalRangeForecast(rawPredictedTotal, currentCumulative, historyTotals, isComplete, fallbackTotal = 0) {
@@ -5676,25 +5695,42 @@
 
             // 월마감 예상은 새 일마감 실적이 입력될 때마다 현재 누계와
             // 해당 영업일까지의 과거 누적비중을 다시 역산해 즉시 갱신합니다.
-            // 기존처럼 과거 최저/최고값에 딱 붙여 고정하지 않고,
-            // 진행률이 높아질수록 현재 실적 페이스의 반영 비중을 키웁니다.
+            // 다만 평균만 따라가면 낙관적으로 치우칠 수 있어,
+            // 최근 실적 흐름 + 중간값 + 하위 구간을 섞어 더 보수적으로 계산합니다.
             let predictedTotal = averageTotalSales || monthlyTarget;
             if (currentCumulative > 0 && currentAvgCumRatio > 0.0001) {
                 const paceEstimate = currentCumulative / currentAvgCumRatio;
-                const progressWeight = Math.max(0.30, Math.min(0.92, 0.30 + (progress * 0.62)));
-                predictedTotal = (paceEstimate * progressWeight) + (averageTotalSales * (1 - progressWeight));
+                const sampleFactor = Math.max(0, Math.min(1, processedRows.length / 8));
+                const recentTotals = totals.slice(0, Math.min(3, totals.length));
+                const recentAverage = recentTotals.length > 0
+                    ? recentTotals.reduce((sum, value) => sum + value, 0) / recentTotals.length
+                    : averageTotalSales;
+                const medianTotal = historicalRange.median || averageTotalSales || monthlyTarget;
+                const lowerAnchor = historicalRange.p25 || historicalRange.min || medianTotal;
 
-                // 극단적인 1일치 입력 때문에 예상치가 튀는 현상만 부드럽게 완화합니다.
-                // 범위 밖 값을 강제로 같은 값으로 고정하지 않으므로, 새 실적 입력에 따라 계속 변합니다.
-                if (totals.length > 0) {
-                    const softLow = historicalRange.min * 0.85;
-                    const softHigh = historicalRange.max * 1.15;
-                    if (predictedTotal < softLow) {
-                        predictedTotal = softLow - ((softLow - predictedTotal) * 0.25);
-                    } else if (predictedTotal > softHigh) {
-                        predictedTotal = softHigh + ((predictedTotal - softHigh) * 0.25);
+                const paceWeight = 0.32 + (0.18 * sampleFactor);      // 0.32 ~ 0.50
+                const medianWeight = 0.34 - (0.04 * sampleFactor);    // 0.34 ~ 0.30
+                const recentWeight = 1 - paceWeight - medianWeight;   // 0.34 ~ 0.20
+
+                predictedTotal = (paceEstimate * paceWeight)
+                    + (recentAverage * recentWeight)
+                    + (medianTotal * medianWeight);
+
+                // 데이터가 적을수록 상단으로 너무 붙지 않게 한 번 더 눌러줍니다.
+                if (processedRows.length < 6) {
+                    const softCeil = Math.max(historicalRange.p75 || historicalRange.max || predictedTotal, medianTotal);
+                    if (predictedTotal > softCeil) {
+                        predictedTotal = softCeil + ((predictedTotal - softCeil) * 0.18);
                     }
                 }
+
+                // 과거 범위를 넘는 낙관값은 강하게 누릅니다.
+                if (historicalRange.values.length > 0 && currentCumulative <= historicalRange.max) {
+                    predictedTotal = Math.min(predictedTotal, historicalRange.max * (processedRows.length >= 8 ? 1.05 : 1.02));
+                }
+
+                // 하단도 너무 낮아지지 않게만 유지합니다.
+                predictedTotal = Math.max(predictedTotal, lowerAnchor);
             }
 
             if (lastInputIndex >= monthlyBusinessDays) {
@@ -5773,7 +5809,7 @@
             const specialSummary = getMonthlySpecialDaySummary();
             let basisMsg = '';
             if (lastInputIndex === 0) {
-                basisMsg = `이번달 입력 실적이 없어 과거 ${processedRows.length}개월 평균 월마감 ${Math.round(predictedTotal).toLocaleString()}천원을 기준선으로 표시합니다. 과거 월합계 범위는 ${Math.round(historicalRange.min).toLocaleString()}천원~${Math.round(historicalRange.max).toLocaleString()}천원이며, 학습 보정값은 ${specialSummary.summaryText}입니다.`;
+                basisMsg = `이번달 입력 실적이 없어 과거 ${processedRows.length}개월 월합계의 중간값과 하위 구간을 섞은 ${Math.round(predictedTotal).toLocaleString()}천원을 기준선으로 표시합니다. 과거 월합계 범위는 ${Math.round(historicalRange.min).toLocaleString()}천원~${Math.round(historicalRange.max).toLocaleString()}천원이며, 학습 보정값은 ${specialSummary.summaryText}입니다.`;
             } else {
                 const ratioPct = (currentAvgCumRatio * 100).toFixed(1);
                 const lastDateLabel = getMonthlyBusinessDateLabel(lastInputIndex);
