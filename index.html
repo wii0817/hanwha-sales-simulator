@@ -4085,19 +4085,28 @@
                     predictedTotal = weightedEstimateSum / estimateWeightSum;
                     const enteredCount = activeKeys.length;
                     const totalCount = SLOT_KEYS.length;
-                    const relaxSparseClosingRange = currentAnalysisMode === 'closing';
-                    predictedTotal = applyConservativeForecast(
-                        predictedTotal,
-                        todaySum,
-                        averageTotalSales,
-                        enteredCount >= totalCount,
-                        historicalTotals,
-                        { relaxSparseRange: relaxSparseClosingRange, sparseSampleThreshold: 3 }
-                    );
+                    const isSparseClosingMode = currentAnalysisMode === 'closing' && historicalTotals.length < 3;
+                    if (isSparseClosingMode) {
+                        // 희소 월마감일도 다른 당일 모드와 같은 역산 구조를 사용하되,
+                        // 과거 1건에 고정되거나 현재 페이스만 과도하게 따라가지 않도록
+                        // 선택 모드 평균을 진행 시각에 따라 18~35%만 완충값으로 섞습니다.
+                        const latestRatio = Number(avgSingleRatios[lastInputKey]) || 0;
+                        const averageBufferWeight = Math.max(0.18, Math.min(0.35, 0.35 - (latestRatio * 0.17)));
+                        predictedTotal = (predictedTotal * (1 - averageBufferWeight)) + (averageTotalSales * averageBufferWeight);
+                        predictedTotal = Math.max(predictedTotal, todaySum);
+                    } else {
+                        predictedTotal = applyConservativeForecast(
+                            predictedTotal,
+                            todaySum,
+                            averageTotalSales,
+                            enteredCount >= totalCount,
+                            historicalTotals
+                        );
+                    }
 
                     if (enteredCount < totalCount) {
-                        if (relaxSparseClosingRange && historicalTotals.length < 3) {
-                            basisMsg = `월마감일 표본이 ${historicalTotals.length}건으로 적어 과거 최저·최고 범위를 강제하지 않습니다. 최근 입력 3개 시점에 더 큰 가중치를 두어 현재 누계 흐름으로 오늘 마감을 역산했습니다.`;
+                        if (isSparseClosingMode) {
+                            basisMsg = `월마감일 표본이 ${historicalTotals.length}건으로 적어 한 건의 최저·최고값에 고정하지 않고, 다른 당일 마감 모드와 동일한 최근 3개 시점 역산값에 선택 모드 평균을 소폭 혼합했습니다.`;
                         } else {
                             basisMsg = `현재 가중 패턴 모드 ${filteredHistory.length}일치의 시간대별 누적 비중과 최근 입력 흐름으로 오늘 마감을 역산했습니다. 예측값은 과거 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 산출됩니다.`;
                         }
@@ -5719,25 +5728,38 @@
             const adjustedShape = getMonthlyAdjustedShape(processedRows, monthlyBusinessDays, learnedSpecialPattern);
             const currentAvgCumRatio = lastInputIndex > 0 ? (adjustedShape.cumRatios[`bd${lastInputIndex}`] || getMonthlyAverageCumRatio(progress, processedRows)) : 0;
 
-            // 월마감 예상은 새 일마감 실적이 입력될 때마다 현재 누계와
-            // 해당 영업일까지의 과거 누적비중을 다시 역산해 즉시 갱신합니다.
-            // 기존처럼 과거 최저/최고값에 딱 붙여 고정하지 않고,
-            // 진행률이 높아질수록 현재 실적 페이스의 반영 비중을 키웁니다.
+            // 월마감 예상도 당일 마감 예측과 비슷하게 '최근 실제 흐름'을 중심으로 계산합니다.
+            // 누적비중 역산값 하나만 사용하면 마감일 가중치가 큰 달에는 마지막 날 예상이 튈 수 있으므로,
+            // 최근 3영업일의 실제 일마감 페이스와 과거 월평균을 함께 혼합합니다.
             let predictedTotal = averageTotalSales || monthlyTarget;
             if (currentCumulative > 0 && currentAvgCumRatio > 0.0001) {
-                const paceEstimate = currentCumulative / currentAvgCumRatio;
-                const progressWeight = Math.max(0.30, Math.min(0.92, 0.30 + (progress * 0.62)));
-                predictedTotal = (paceEstimate * progressWeight) + (averageTotalSales * (1 - progressWeight));
+                const shapePaceEstimate = currentCumulative / currentAvgCumRatio;
+                const recentActuals = activeIndexes
+                    .slice(-3)
+                    .map(dayNo => Number(currentDailyValues[`bd${dayNo}`]) || 0)
+                    .filter(value => value > 0);
+                const recentDailyAverage = recentActuals.length > 0
+                    ? recentActuals.reduce((sum, value) => sum + value, 0) / recentActuals.length
+                    : (currentCumulative / Math.max(lastInputIndex, 1));
+                const remainingDaysForRunRate = Math.max(monthlyBusinessDays - lastInputIndex, 0);
+                const recentRunRateEstimate = currentCumulative + (recentDailyAverage * remainingDaysForRunRate);
 
-                // 극단적인 1일치 입력 때문에 예상치가 튀는 현상만 부드럽게 완화합니다.
-                // 범위 밖 값을 강제로 같은 값으로 고정하지 않으므로, 새 실적 입력에 따라 계속 변합니다.
+                // 초반에는 월평균을 더 참고하고, 중후반에는 최근 실적을 더 강하게 반영합니다.
+                const currentFlowWeight = Math.max(0.42, Math.min(0.86, 0.42 + (progress * 0.44)));
+                const shapeWeightWithinFlow = Math.max(0.35, Math.min(0.60, 0.60 - (progress * 0.25)));
+                const currentFlowEstimate = (shapePaceEstimate * shapeWeightWithinFlow)
+                    + (recentRunRateEstimate * (1 - shapeWeightWithinFlow));
+                predictedTotal = (currentFlowEstimate * currentFlowWeight)
+                    + (averageTotalSales * (1 - currentFlowWeight));
+
+                // 과거 범위는 강제 하한·상한이 아니라 극단값만 완만하게 줄이는 소프트 가드로 사용합니다.
                 if (totals.length > 0) {
-                    const softLow = historicalRange.min * 0.85;
-                    const softHigh = historicalRange.max * 1.15;
+                    const softLow = historicalRange.min * 0.82;
+                    const softHigh = historicalRange.max * 1.12;
                     if (predictedTotal < softLow) {
-                        predictedTotal = softLow - ((softLow - predictedTotal) * 0.25);
+                        predictedTotal = softLow - ((softLow - predictedTotal) * 0.45);
                     } else if (predictedTotal > softHigh) {
-                        predictedTotal = softHigh + ((predictedTotal - softHigh) * 0.25);
+                        predictedTotal = softHigh + ((predictedTotal - softHigh) * 0.35);
                     }
                 }
             }
@@ -5788,8 +5810,15 @@
                     // 입력 완료 구간은 자동예상선이 실제 누적선과 정확히 겹치게 합니다.
                     predictedCumLine[key] = actualRunningByDay[key];
                 } else if (lastInputIndex > 0) {
-                    // 마지막 실제 누적 이후의 과거 패턴만 0~100%로 재정규화합니다.
-                    const futureProgress = Math.max(0, Math.min(1, (ratio - anchorRatio) / remainingShapeDenominator));
+                    // 마감일 학습 패턴과 균등 잔여 진행률을 혼합해 마지막 날 쏠림을 완화합니다.
+                    // 진행 후반일수록 실제 최근 일마감 흐름을 신뢰하므로 균등 배분 비중을 더 높입니다.
+                    const shapeFutureProgress = Math.max(0, Math.min(1, (ratio - anchorRatio) / remainingShapeDenominator));
+                    const linearFutureProgress = Math.max(0, Math.min(1,
+                        (dayNo - lastInputIndex) / Math.max(monthlyBusinessDays - lastInputIndex, 1)
+                    ));
+                    const shapeBlendWeight = Math.max(0.45, Math.min(0.62, 0.62 - (progress * 0.17)));
+                    const futureProgress = (shapeFutureProgress * shapeBlendWeight)
+                        + (linearFutureProgress * (1 - shapeBlendWeight));
                     predictedCumLine[key] = currentCumulative + (remainingForecastAmount * futureProgress);
                 } else {
                     predictedCumLine[key] = predictedTotal * ratio;
@@ -5822,7 +5851,7 @@
             } else {
                 const ratioPct = (currentAvgCumRatio * 100).toFixed(1);
                 const lastDateLabel = getMonthlyBusinessDateLabel(lastInputIndex);
-                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 월별 패턴과 특수일을 반영한 누적비중 ${ratioPct}%를 역산했습니다. 자동예상 전개는 현재 실제 누계 ${Math.round(currentCumulative).toLocaleString()}천원에서 이어지며, 남은 영업일 패턴과 현재 실적 페이스를 다시 계산해 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. 새 일마감 실적을 입력할 때마다 예상값이 즉시 갱신됩니다. (${specialSummary.summaryText})`;
+                basisMsg = `${currentMonthId} ${lastInputIndex}/${monthlyBusinessDays}영업일${lastDateLabel ? `(${lastDateLabel})` : ''}까지 누계 ${Math.round(currentCumulative).toLocaleString()}천원입니다. 과거 누적비중 ${ratioPct}% 역산값과 최근 3영업일의 실제 일마감 페이스를 함께 반영해 월마감 ${Math.round(predictedTotal).toLocaleString()}천원으로 예측합니다. 남은 구간은 마감일 패턴과 균등 진행률을 혼합해 마지막 날 예상이 과도하게 튀지 않도록 전개합니다. (${specialSummary.summaryText})`;
                 if (hasMiddleGap) basisMsg += ' 중간 영업일 공란이 있어 실제 월 누계가 낮게 계산될 수 있습니다.';
             }
 
