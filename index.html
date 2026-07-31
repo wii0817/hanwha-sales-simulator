@@ -3643,9 +3643,11 @@
             return { values, min, max, average };
         }
 
-        function applyHistoricalRangeForecast(rawPredictedTotal, currentCumulative, historyTotals, isComplete, fallbackTotal = 0) {
+        function applyHistoricalRangeForecast(rawPredictedTotal, currentCumulative, historyTotals, isComplete, fallbackTotal = 0, options = {}) {
             const current = Math.max(Number(currentCumulative) || 0, 0);
             const range = getForecastHistoryRange(historyTotals, fallbackTotal);
+            const sparseSampleThreshold = Number(options.sparseSampleThreshold ?? 3);
+            const relaxSparseRange = Boolean(options.relaxSparseRange);
             let predicted = Number(rawPredictedTotal);
 
             if (!Number.isFinite(predicted) || predicted <= 0) {
@@ -3658,19 +3660,27 @@
             // 과거 모수가 없으면 현재 누계보다 낮지 않게만 보정합니다.
             if (range.values.length === 0) return Math.max(predicted, current);
 
+            // 월마감일처럼 표본이 1~2건뿐인 경우 과거 최저=평균=최고가 되어
+            // 예측값이 한 건의 실적에 고정되는 현상을 방지합니다.
+            // 희소 표본 구간에서는 현재 누계만 절대 하한으로 두고 과거 범위를 강제하지 않습니다.
+            if (relaxSparseRange && range.values.length < sparseSampleThreshold) {
+                return Math.max(predicted, current);
+            }
+
             const lowerBound = Math.max(range.min, current);
             const upperBound = Math.max(range.max, current);
             return Math.min(Math.max(predicted, lowerBound), upperBound);
         }
 
         // 기존 호출부 호환용 함수명 유지
-        function applyConservativeForecast(rawPredictedTotal, currentCumulative, averageTotalSales, isComplete, historyTotals = []) {
+        function applyConservativeForecast(rawPredictedTotal, currentCumulative, averageTotalSales, isComplete, historyTotals = [], options = {}) {
             return applyHistoricalRangeForecast(
                 rawPredictedTotal,
                 currentCumulative,
                 historyTotals,
                 isComplete,
-                averageTotalSales
+                averageTotalSales,
+                options
             );
         }
 
@@ -4013,9 +4023,19 @@
             const avgSingleRatios = makeMonotoneDailyRatios(blendedRatios);
 
             const historicalTotalsForAverage = processedDays.map(day => day.total).filter(value => value > 0);
-            const averageTotalSales = historicalTotalsForAverage.length
+            const allHistoricalTotalsForAverage = allProcessedDays.map(day => day.total).filter(value => value > 0);
+            const modeAverageTotal = historicalTotalsForAverage.length
                 ? historicalTotalsForAverage.reduce((sum, value) => sum + value, 0) / historicalTotalsForAverage.length
                 : dailyTarget;
+            const allAverageTotal = allHistoricalTotalsForAverage.length
+                ? allHistoricalTotalsForAverage.reduce((sum, value) => sum + value, 0) / allHistoricalTotalsForAverage.length
+                : modeAverageTotal;
+            // 금요일·월마감일 총액 평균도 시간대 패턴과 동일하게 전체 데이터와 축소 혼합합니다.
+            // 표본 1건이면 해당 유형 1건에 고정되지 않고 전체 평균을 5/6만큼 참고합니다.
+            const shouldBlendSparseMode = currentAnalysisMode === 'friday' || currentAnalysisMode === 'closing';
+            const averageTotalSales = shouldBlendSparseMode
+                ? (modeAverageTotal * sampleWeight) + (allAverageTotal * (1 - sampleWeight))
+                : modeAverageTotal;
             const avgCumulativeValues = {};
             SLOT_KEYS.forEach(key => {
                 avgCumulativeValues[key] = averageTotalSales * avgSingleRatios[key];
@@ -4046,17 +4066,41 @@
             const lastInputKey = activeKeys.length > 0 ? activeKeys[activeKeys.length - 1] : null;
 
             if (activeKeys.length > 0) {
-                const activeRatiosSum = activeKeys.reduce((sum, key) => sum + avgSingleRatios[key], 0);
-                const activeInputsSum = activeKeys.reduce((sum, key) => sum + todayInputs[key], 0);
+                // 누적값을 단순 합산하지 않고 최근 3개 입력 시점의 개별 마감 역산값을 사용합니다.
+                // 최신 입력일수록 1→2→4의 가중치를 부여하여 현재 실적 페이스를 빠르게 반영합니다.
+                const recentKeys = activeKeys.slice(-3);
+                let weightedEstimateSum = 0;
+                let estimateWeightSum = 0;
+                recentKeys.forEach((key, index) => {
+                    const ratio = Number(avgSingleRatios[key]) || 0;
+                    const input = Number(todayInputs[key]) || 0;
+                    if (ratio > 0 && input > 0) {
+                        const weight = Math.pow(2, index);
+                        weightedEstimateSum += (input / ratio) * weight;
+                        estimateWeightSum += weight;
+                    }
+                });
 
-                if (activeRatiosSum > 0) {
-                    predictedTotal = activeInputsSum / activeRatiosSum;
+                if (estimateWeightSum > 0) {
+                    predictedTotal = weightedEstimateSum / estimateWeightSum;
                     const enteredCount = activeKeys.length;
                     const totalCount = SLOT_KEYS.length;
-                    predictedTotal = applyConservativeForecast(predictedTotal, todaySum, averageTotalSales, enteredCount >= totalCount, historicalTotals);
+                    const relaxSparseClosingRange = currentAnalysisMode === 'closing';
+                    predictedTotal = applyConservativeForecast(
+                        predictedTotal,
+                        todaySum,
+                        averageTotalSales,
+                        enteredCount >= totalCount,
+                        historicalTotals,
+                        { relaxSparseRange: relaxSparseClosingRange, sparseSampleThreshold: 3 }
+                    );
 
                     if (enteredCount < totalCount) {
-                        basisMsg = `현재 가중 패턴 모드 ${filteredHistory.length}일치의 시간대별 누적 비중으로 오늘 마감을 역산했습니다. 예측값은 과거 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 산출됩니다.`;
+                        if (relaxSparseClosingRange && historicalTotals.length < 3) {
+                            basisMsg = `월마감일 표본이 ${historicalTotals.length}건으로 적어 과거 최저·최고 범위를 강제하지 않습니다. 최근 입력 3개 시점에 더 큰 가중치를 두어 현재 누계 흐름으로 오늘 마감을 역산했습니다.`;
+                        } else {
+                            basisMsg = `현재 가중 패턴 모드 ${filteredHistory.length}일치의 시간대별 누적 비중과 최근 입력 흐름으로 오늘 마감을 역산했습니다. 예측값은 과거 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 산출됩니다.`;
+                        }
                     } else {
                         basisMsg = `오늘 모든 마감 매출이 기입되었습니다. 최종 일 마감 결과는 ${Math.round(predictedTotal).toLocaleString()}천원입니다.`;
                     }
@@ -4084,7 +4128,8 @@
                 targetGuideLine[key] = dailyTarget * avgSingleRatios[key];
             });
 
-            const confidenceScore = Math.min(60 + Math.round(filteredHistory.length * 2.5), 99.2);
+            // 희소 표본인데도 기본 신뢰도가 60점부터 시작하던 낙관적 표시를 완화합니다.
+            const confidenceScore = Math.min(35 + Math.round(filteredHistory.length * 8), 96);
             let confidenceGrade = "보통 (데이터 안정)";
             if (filteredHistory.length >= 15) confidenceGrade = "매우 높음 (수렴 최고조)";
             else if (filteredHistory.length >= 8) confidenceGrade = "높음 (정합성 최적화)";
