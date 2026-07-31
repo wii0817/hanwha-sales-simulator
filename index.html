@@ -747,6 +747,90 @@
             line-height: 1.4;
         }
 
+
+
+        .future-forecast-panel {
+            margin-top: 14px;
+            padding: 16px;
+            border: 1px solid rgba(243, 115, 33, 0.18);
+            border-radius: 18px;
+            background: rgba(243, 115, 33, 0.025);
+        }
+
+        .future-forecast-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .future-forecast-title {
+            font-size: 12px;
+            font-weight: 900;
+            color: var(--text-primary);
+        }
+
+        .future-forecast-note {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        .future-forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        @media (min-width: 640px) {
+            .future-forecast-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+        }
+
+        .future-forecast-item {
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: #ffffff;
+            min-width: 0;
+        }
+
+        .future-forecast-time {
+            font-size: 10px;
+            font-weight: 900;
+            color: var(--text-secondary);
+        }
+
+        .future-forecast-cumulative {
+            margin-top: 4px;
+            font-size: 14px;
+            font-weight: 950;
+            color: var(--hanwha-orange);
+            white-space: nowrap;
+        }
+
+        .future-forecast-increment {
+            margin-top: 3px;
+            font-size: 9.5px;
+            font-weight: 800;
+            color: var(--emerald);
+            line-height: 1.35;
+        }
+
+        .future-forecast-empty {
+            grid-column: 1 / -1;
+            padding: 12px;
+            border-radius: 12px;
+            background: #ffffff;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 700;
+            text-align: center;
+        }
+
         .input-summary-bar {
             background-color: #f8fafc;
             border: 1px solid var(--border-color);
@@ -2986,6 +3070,18 @@
                     </div>
                 </div>
 
+
+
+                <div class="future-forecast-panel">
+                    <div class="future-forecast-header">
+                        <div class="future-forecast-title">이 추세 기준 남은 시간대 누적 예상</div>
+                        <div id="future-forecast-note" class="future-forecast-note">누적 실적 입력 후 자동 계산</div>
+                    </div>
+                    <div id="future-forecast-grid" class="future-forecast-grid">
+                        <div class="future-forecast-empty">현재 누적 실적을 입력하면 이후 시간대 예상 누적액과 추가 유입액이 표시됩니다.</div>
+                    </div>
+                </div>
+
                 <!-- Action 버튼 -->
                 <div class="action-bar-inputs">
                     <button class="btn-commit" onclick="commitToday()">
@@ -4247,6 +4343,7 @@
             document.getElementById('count-entered').innerText = `(${stats.activeKeys.length}개 시간 기입 완료)`;
             document.getElementById('predict-entered').innerText = Math.round(stats.predictedTotal).toLocaleString();
 
+            renderFutureForecast(stats);
             renderTimelineList(stats);
             drawSVGChart(stats);
             renderArchiveTable(stats);
@@ -4259,12 +4356,59 @@
                     if (isEntered) {
                         const singlePredict = ratio > 0 ? Math.round(stats.todayInputs[slot.key] / ratio) : null;
                         const singlePredictStr = singlePredict !== null ? singlePredict.toLocaleString() + '천원' : '예측 불가';
-                        predLabel.innerHTML = `이 시간 기준 최종 마감 예상: <span style="color: var(--emerald);">${singlePredictStr}</span>`;
+                        const slotIndex = SLOT_KEYS.indexOf(slot.key);
+                        const nextSlot = slotIndex >= 0 && slotIndex < SLOTS.length - 1 ? SLOTS[slotIndex + 1] : null;
+                        const nextExpected = nextSlot ? Math.max(stats.todayInputs[slot.key], Math.round(stats.predictionTrendLine[nextSlot.key] || 0)) : null;
+                        const nextIncrement = nextExpected !== null ? Math.max(0, nextExpected - stats.todayInputs[slot.key]) : null;
+                        const nextText = nextSlot
+                            ? `<br><span style="color: var(--text-secondary);">${nextSlot.label.replace(' 누적', '')} 예상 누적: </span><span style="color: var(--hanwha-orange);">${nextExpected.toLocaleString()}천원</span> <span style="color: var(--emerald);">(+${nextIncrement.toLocaleString()}천원)</span>`
+                            : '';
+                        predLabel.innerHTML = `이 시간 기준 최종 마감 예상: <span style="color: var(--emerald);">${singlePredictStr}</span>${nextText}`;
                     } else {
                         const targetStandard = Math.round(dailyTarget * ratio);
                         predLabel.innerHTML = `표준 누적 목표액: <span style="color: var(--text-muted); font-weight: normal;">${targetStandard.toLocaleString()}천원</span>`;
                     }
                 }
+            });
+        }
+
+
+        function renderFutureForecast(stats) {
+            const grid = document.getElementById('future-forecast-grid');
+            const note = document.getElementById('future-forecast-note');
+            if (!grid || !note) return;
+
+            grid.innerHTML = '';
+            if (!stats.lastInputKey || stats.activeKeys.length === 0) {
+                note.innerText = '누적 실적 입력 후 자동 계산';
+                grid.innerHTML = '<div class="future-forecast-empty">현재 누적 실적을 입력하면 이후 시간대 예상 누적액과 추가 유입액이 표시됩니다.</div>';
+                return;
+            }
+
+            const lastIndex = SLOT_KEYS.indexOf(stats.lastInputKey);
+            const currentValue = Number(stats.todayInputs[stats.lastInputKey]) || Number(stats.todaySum) || 0;
+            const remainingSlots = SLOTS.filter((slot, index) => index > lastIndex);
+            const lastSlot = SLOTS[lastIndex];
+            note.innerText = `${lastSlot ? lastSlot.label.replace(' 누적', '') : '현재'} ${currentValue.toLocaleString()}천원 기준`;
+
+            if (remainingSlots.length === 0) {
+                grid.innerHTML = '<div class="future-forecast-empty">마감 실적까지 모두 입력되어 추가 시간대 예상이 없습니다.</div>';
+                return;
+            }
+
+            let previousExpected = currentValue;
+            remainingSlots.forEach(slot => {
+                const predicted = Math.max(previousExpected, Math.round(Number(stats.predictionTrendLine[slot.key]) || 0));
+                const increment = Math.max(0, predicted - previousExpected);
+                const item = document.createElement('div');
+                item.className = 'future-forecast-item';
+                item.innerHTML = `
+                    <div class="future-forecast-time">${slot.label.replace(' 누적', '')}</div>
+                    <div class="future-forecast-cumulative">${predicted.toLocaleString()}천원</div>
+                    <div class="future-forecast-increment">직전 예상 대비 +${increment.toLocaleString()}천원</div>
+                `;
+                grid.appendChild(item);
+                previousExpected = predicted;
             });
         }
 
