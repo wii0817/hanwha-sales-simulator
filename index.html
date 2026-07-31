@@ -4047,6 +4047,23 @@
             });
             const historicalTotals = processedDays.map(day => Number(day.total) || 0).filter(value => value > 0);
             const historicalRange = getForecastHistoryRange(historicalTotals, averageTotalSales);
+
+            // 월마감일 집중 모드의 비교 하한: 실적 아카이브의 평일(금요일 제외) 패턴만 별도로 계산합니다.
+            const weekdayProcessedDays = historicalData
+                .filter(day => day.type === 'weekday')
+                .map(day => {
+                    const normalizedHourly = normalizeDailyCumulativeRow(day.hourly || {});
+                    const total = Number(normalizedHourly.close) || 0;
+                    return { ...day, normalizedHourly, total };
+                })
+                .filter(day => day.total > 0);
+            const weekdayRatios = weekdayProcessedDays.length
+                ? buildAverageDailyRatios(weekdayProcessedDays)
+                : null;
+            const weekdayTotals = weekdayProcessedDays.map(day => day.total).filter(value => value > 0);
+            const weekdayAverageTotal = weekdayTotals.length
+                ? weekdayTotals.reduce((sum, value) => sum + value, 0) / weekdayTotals.length
+                : 0;
             const todayInputs = {};
             const activeKeys = [];
             let todaySum = 0;
@@ -4072,7 +4089,7 @@
 
             if (activeKeys.length > 0) {
                 // 누적값을 단순 합산하지 않고 최근 3개 입력 시점의 개별 마감 역산값을 사용합니다.
-                // 최신 입력일수록 1→2→4의 가중치를 부여하여 현재 실적 페이스를 빠르게 반영합니다.
+                // 최신 입력일수록 1→3→9의 가중치를 부여하여 직전 실적 흐름을 훨씬 강하게 반영합니다.
                 const recentKeys = activeKeys.slice(-3);
                 let weightedEstimateSum = 0;
                 let estimateWeightSum = 0;
@@ -4080,7 +4097,7 @@
                     const ratio = Number(avgSingleRatios[key]) || 0;
                     const input = Number(todayInputs[key]) || 0;
                     if (ratio > 0 && input > 0) {
-                        const weight = Math.pow(2, index);
+                        const weight = Math.pow(3, index);
                         weightedEstimateSum += (input / ratio) * weight;
                         estimateWeightSum += weight;
                     }
@@ -4109,11 +4126,39 @@
                         );
                     }
 
+                    // 월마감일에는 일반 평일보다 계약 유입이 많은 업무 특성을 반영합니다.
+                    // 마감값이 확정되기 전에는 동일한 오늘 입력값으로 역산한 평일 예측보다 최소 2% 높게 유지합니다.
+                    let weekdayComparisonForecast = 0;
+                    if (currentAnalysisMode === 'closing' && enteredCount < totalCount && weekdayRatios && weekdayTotals.length > 0) {
+                        let weekdayWeightedSum = 0;
+                        let weekdayWeightSum = 0;
+                        recentKeys.forEach((key, index) => {
+                            const weekdayRatio = Number(weekdayRatios[key]) || 0;
+                            const input = Number(todayInputs[key]) || 0;
+                            if (weekdayRatio > 0 && input > 0) {
+                                const weight = Math.pow(3, index);
+                                weekdayWeightedSum += (input / weekdayRatio) * weight;
+                                weekdayWeightSum += weight;
+                            }
+                        });
+                        if (weekdayWeightSum > 0) {
+                            const weekdayRawForecast = weekdayWeightedSum / weekdayWeightSum;
+                            weekdayComparisonForecast = applyConservativeForecast(
+                                weekdayRawForecast,
+                                todaySum,
+                                weekdayAverageTotal,
+                                false,
+                                weekdayTotals
+                            );
+                            predictedTotal = Math.max(predictedTotal, weekdayComparisonForecast * 1.02, todaySum);
+                        }
+                    }
+
                     if (enteredCount < totalCount) {
                         if (isSparseClosingMode) {
-                            basisMsg = `월마감일 표본이 ${historicalTotals.length}건으로 적어 한 건의 최저·최고값에 고정하지 않고, 다른 당일 마감 모드와 동일한 최근 3개 시점 역산값에 별도 예측 보정 기준값을 소폭 혼합했습니다. 화면의 마감일 평균은 월마감일 실적만의 산술평균입니다.`;
+                            basisMsg = `월마감일 표본이 ${historicalTotals.length}건으로 적어 한 건의 최저·최고값에 고정하지 않고, 최근 3개 시점에 1·3·9 가중치를 적용하고 별도 예측 보정 기준값을 소폭 혼합했습니다. 또한 평일(금요일 제외) 동일 실적 예측보다 최소 2% 높게 유지합니다. 화면의 마감일 평균은 월마감일 실적만의 산술평균입니다.`;
                         } else {
-                            basisMsg = `현재 가중 패턴 모드 ${filteredHistory.length}일치의 시간대별 누적 비중과 최근 입력 흐름으로 오늘 마감을 역산했습니다. 예측값은 과거 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 산출됩니다.`;
+                            basisMsg = `현재 가중 패턴 모드 ${filteredHistory.length}일치의 시간대별 누적 비중과 최신 시점 중심 1·3·9 가중치로 오늘 마감을 역산했습니다. 예측값은 과거 최저 ${Math.round(historicalRange.min).toLocaleString()}천원~최고 ${Math.round(historicalRange.max).toLocaleString()}천원 범위 안에서 산출됩니다.`;
                         }
                     } else {
                         basisMsg = `오늘 모든 마감 매출이 기입되었습니다. 최종 일 마감 결과는 ${Math.round(predictedTotal).toLocaleString()}천원입니다.`;
