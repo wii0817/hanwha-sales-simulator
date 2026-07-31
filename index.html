@@ -5358,6 +5358,29 @@
             makeMonthlySampleRow(103, '2026-05', 21, 358000, 1.28)
         ];
 
+
+        // 기본 샘플은 화면 체험용일 뿐 실제 월마감 평균/학습 모수에는 포함하지 않습니다.
+        function isDefaultMonthlySampleRow(row) {
+            if (!row) return false;
+            const sampleIds = new Set([101, 102, 103]);
+            return sampleIds.has(Number(row.id));
+        }
+
+        // 같은 기준월이 여러 번 등록된 경우 가장 최근에 등록된 1건만 사용합니다.
+        function getEffectiveMonthlyHistoricalRows(rows) {
+            const source = Array.isArray(rows) ? rows : [];
+            const realRows = source.filter(row => !isDefaultMonthlySampleRow(row));
+            const seenMonths = new Set();
+            const deduped = [];
+            realRows.forEach(row => {
+                const monthKey = String(row && row.month ? row.month : '').trim();
+                if (monthKey && seenMonths.has(monthKey)) return;
+                if (monthKey) seenMonths.add(monthKey);
+                deduped.push(row);
+            });
+            return deduped;
+        }
+
         function initMonthlyForecastModule() {
             const savedMonthlyHistory = localStorage.getItem('hanwha_inbojang_monthly_historical_v1');
             const savedCurrentMonth = localStorage.getItem('hanwha_inbojang_current_month_data_v1');
@@ -5367,7 +5390,7 @@
             const savedMonthlyFridayDayNumbersText = localStorage.getItem('hanwha_inbojang_monthly_friday_day_numbers_v1');
             const savedMonthlyBusinessDateMap = localStorage.getItem('hanwha_inbojang_monthly_business_date_map_v1');
 
-            monthlyHistoricalData = savedMonthlyHistory ? JSON.parse(savedMonthlyHistory) : DEFAULT_MONTHLY_HISTORICAL_DATA;
+            monthlyHistoricalData = savedMonthlyHistory ? JSON.parse(savedMonthlyHistory) : [];
             currentMonthData = savedCurrentMonth ? { ...emptyMonthlyData(), ...JSON.parse(savedCurrentMonth) } : emptyMonthlyData();
             monthlyTarget = savedMonthlyTarget ? Number(savedMonthlyTarget) : 350000;
             monthlyBusinessDays = savedMonthlyWorkdays ? clampMonthlyWorkdays(savedMonthlyWorkdays) : 22;
@@ -5693,7 +5716,7 @@
         }
 
         function calculateMonthlyStats() {
-            const sourceRows = (monthlyHistoricalData && monthlyHistoricalData.length > 0) ? monthlyHistoricalData : DEFAULT_MONTHLY_HISTORICAL_DATA;
+            const sourceRows = getEffectiveMonthlyHistoricalRows(monthlyHistoricalData);
             const processedRows = sourceRows.filter(row => getMonthlyRowTotal(row) > 0);
             const totals = processedRows.map(row => getMonthlyRowTotal(row)).filter(v => v > 0);
             const averageTotalSales = totals.length > 0 ? totals.reduce((sum, v) => sum + v, 0) / totals.length : monthlyTarget;
@@ -5847,7 +5870,7 @@
             const specialSummary = getMonthlySpecialDaySummary();
             let basisMsg = '';
             if (lastInputIndex === 0) {
-                basisMsg = `이번달 입력 실적이 없어 과거 ${processedRows.length}개월 평균 월마감 ${Math.round(predictedTotal).toLocaleString()}천원을 기준선으로 표시합니다. 과거 월합계 범위는 ${Math.round(historicalRange.min).toLocaleString()}천원~${Math.round(historicalRange.max).toLocaleString()}천원이며, 학습 보정값은 ${specialSummary.summaryText}입니다.`;
+                basisMsg = `이번달 입력 실적이 없어 ${processedRows.length > 0 ? `실제 등록된 과거 ${processedRows.length}개월 평균 월마감` : '등록된 과거 월이 없어 월 목표'} ${Math.round(predictedTotal).toLocaleString()}천원을 기준선으로 표시합니다. 과거 월합계 범위는 ${Math.round(historicalRange.min).toLocaleString()}천원~${Math.round(historicalRange.max).toLocaleString()}천원이며, 학습 보정값은 ${specialSummary.summaryText}입니다.`;
             } else {
                 const ratioPct = (currentAvgCumRatio * 100).toFixed(1);
                 const lastDateLabel = getMonthlyBusinessDateLabel(lastInputIndex);
@@ -5898,7 +5921,7 @@
                 if (el) el.innerText = value;
             };
 
-            setText('monthly-archive-tab-count', monthlyHistoricalData.length);
+            setText('monthly-archive-tab-count', getEffectiveMonthlyHistoricalRows(monthlyHistoricalData).length);
             setText('month-predict-total', Math.round(stats.predictedTotal).toLocaleString());
             setText('month-current-sum', Math.round(stats.currentCumulative).toLocaleString());
             setText('month-required-daily', Math.round(stats.requiredDailyAverage).toLocaleString());
@@ -6204,9 +6227,9 @@
             });
 
             const countEl = document.getElementById('monthly-archive-count');
-            if (countEl) countEl.innerText = monthlyHistoricalData.length;
+            if (countEl) countEl.innerText = getEffectiveMonthlyHistoricalRows(monthlyHistoricalData).length;
             const tabCountEl = document.getElementById('monthly-archive-tab-count');
-            if (tabCountEl) tabCountEl.innerText = monthlyHistoricalData.length;
+            if (tabCountEl) tabCountEl.innerText = getEffectiveMonthlyHistoricalRows(monthlyHistoricalData).length;
         }
 
         function addMonthlyHistoryRow(event) {
@@ -6238,6 +6261,7 @@
 
             const dateMap = normalizeMonthlyBusinessDateMap(monthlyArchiveBusinessDateMap, monthValue, workdays);
             const newRow = { id: Date.now(), month: monthValue, workdays, daily, dateMap };
+            monthlyHistoricalData = monthlyHistoricalData.filter(row => isDefaultMonthlySampleRow(row) || String(row.month || '') !== monthValue);
             monthlyHistoricalData.unshift(newRow);
             saveMonthlyToStorage();
 
@@ -6296,6 +6320,7 @@
                     daily[key] = idx < monthlyBusinessDays ? Number(currentMonthData[key] || 0) : null;
                 });
                 const committedDateMap = normalizeMonthlyBusinessDateMap(monthlyBusinessDateMap, currentMonthId, monthlyBusinessDays);
+                monthlyHistoricalData = monthlyHistoricalData.filter(row => isDefaultMonthlySampleRow(row) || String(row.month || '') !== currentMonthId);
                 monthlyHistoricalData.unshift({ id: Date.now(), month: currentMonthId, workdays: monthlyBusinessDays, daily, dateMap: committedDateMap });
                 currentMonthData = emptyMonthlyData();
                 saveMonthlyToStorage();
