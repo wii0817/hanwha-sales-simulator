@@ -5359,23 +5359,19 @@
         ];
 
 
-        // 기본 샘플은 화면 체험용일 뿐 실제 월마감 평균/학습 모수에는 포함하지 않습니다.
-        function isDefaultMonthlySampleRow(row) {
-            if (!row) return false;
-            const sampleIds = new Set([101, 102, 103]);
-            return sampleIds.has(Number(row.id));
-        }
-
-        // 같은 기준월이 여러 번 등록된 경우 가장 최근에 등록된 1건만 사용합니다.
+        // 월마감 평균과 예측 학습은 '실적 아카이브'에 실제 저장된 월별 기록만 사용합니다.
+        // 별도 샘플 판정이나 임의 데이터 보정은 하지 않으며, 같은 기준월이 중복되면
+        // 배열 앞쪽(가장 최근 등록/수정된 기록)의 1건만 사용합니다.
         function getEffectiveMonthlyHistoricalRows(rows) {
             const source = Array.isArray(rows) ? rows : [];
-            const realRows = source.filter(row => !isDefaultMonthlySampleRow(row));
             const seenMonths = new Set();
             const deduped = [];
-            realRows.forEach(row => {
-                const monthKey = String(row && row.month ? row.month : '').trim();
-                if (monthKey && seenMonths.has(monthKey)) return;
-                if (monthKey) seenMonths.add(monthKey);
+            source.forEach(row => {
+                if (!row || typeof row !== 'object') return;
+                const monthKey = String(row.month || '').trim();
+                if (!monthKey || seenMonths.has(monthKey)) return;
+                if (!row.daily || typeof row.daily !== 'object') return;
+                seenMonths.add(monthKey);
                 deduped.push(row);
             });
             return deduped;
@@ -5719,7 +5715,7 @@
             const sourceRows = getEffectiveMonthlyHistoricalRows(monthlyHistoricalData);
             const processedRows = sourceRows.filter(row => getMonthlyRowTotal(row) > 0);
             const totals = processedRows.map(row => getMonthlyRowTotal(row)).filter(v => v > 0);
-            const averageTotalSales = totals.length > 0 ? totals.reduce((sum, v) => sum + v, 0) / totals.length : monthlyTarget;
+            const averageTotalSales = totals.length > 0 ? totals.reduce((sum, v) => sum + v, 0) / totals.length : 0;
             const historicalRange = getForecastHistoryRange(totals, averageTotalSales);
 
             const currentDailyValues = {};
@@ -5754,7 +5750,7 @@
             // 월마감 예상도 당일 마감 예측과 비슷하게 '최근 실제 흐름'을 중심으로 계산합니다.
             // 누적비중 역산값 하나만 사용하면 마감일 가중치가 큰 달에는 마지막 날 예상이 튈 수 있으므로,
             // 최근 3영업일의 실제 일마감 페이스와 과거 월평균을 함께 혼합합니다.
-            let predictedTotal = averageTotalSales || monthlyTarget;
+            let predictedTotal = totals.length > 0 ? averageTotalSales : monthlyTarget;
             if (currentCumulative > 0 && currentAvgCumRatio > 0.0001) {
                 const shapePaceEstimate = currentCumulative / currentAvgCumRatio;
                 const recentActuals = activeIndexes
@@ -7048,7 +7044,7 @@
             const countEl = document.getElementById('monthly-archive-count');
             if (countEl) countEl.innerText = monthlyHistoricalData.length;
             const tabCountEl = document.getElementById('monthly-archive-tab-count');
-            if (tabCountEl) tabCountEl.innerText = monthlyHistoricalData.length;
+            if (tabCountEl) tabCountEl.innerText = getEffectiveMonthlyHistoricalRows(monthlyHistoricalData).length;
         };
 
         addMonthlyHistoryRow = function(event) {
@@ -7083,6 +7079,8 @@
             const holidays = parseMonthlyHolidayDates(monthlyArchiveHolidayDatesText, monthValue);
             const dateMap = normalizeMonthlyBusinessDateMap(monthlyArchiveBusinessDateMap, monthValue, workdays);
             const newRow = { id: Date.now(), month: monthValue, workdays, daily, dateMap, holidays, holidayText: monthlyArchiveHolidayDatesText || '' };
+            // 실적 아카이브는 기준월별 1건만 유지합니다. 같은 월을 다시 입력하면 최신 값으로 교체합니다.
+            monthlyHistoricalData = monthlyHistoricalData.filter(row => String(row && row.month ? row.month : '') !== monthValue);
             monthlyHistoricalData.unshift(newRow);
             saveMonthlyToStorage();
 
