@@ -3231,6 +3231,13 @@
             return SLOT_KEYS.reduce((acc, k) => { acc[k] = ''; return acc; }, {});
         }
 
+        function hasAnyDailyInputData(map) {
+            return SLOT_KEYS.some(k => {
+                const v = map && map[k];
+                return v !== '' && v !== null && v !== undefined && !isNaN(v);
+            });
+        }
+
         function getDailySlotMinutesFromKey(key) {
             if (key === 'close') return 19 * 60;
             if (/^\d{4}$/.test(key)) {
@@ -3336,20 +3343,7 @@
         }
 
         // 평일(weekday) / 금요일(friday) / 월마감일(closing) 구분이 정밀 도입된 12일 가이드 샘플 데이터셋
-        const DEFAULT_HISTORICAL_DATA = [
-            { id: 1, date: '2026-05-29', type: 'closing', hourly: { 10: 1100, 11: 2500, 13: 4500, 14: 6100, 15: 8000, 16: 10500, 17: 13500, 18: 17500, close: 22800 } },
-            { id: 2, date: '2026-06-01', type: 'weekday', hourly: { 10: 600, 11: 1500, 13: 2700, 14: 3650, 15: 4850, 16: 6250, 17: 8050, 18: 10150, close: 13500 } },
-            { id: 3, date: '2026-06-02', type: 'weekday', hourly: { 10: 700, 11: 1550, 13: 2650, 14: 3550, 15: 4850, 16: 6350, 17: 8300, 18: 10500, close: 14100 } },
-            { id: 4, date: '2026-06-03', type: 'weekday', hourly: { 10: 550, 11: 1500, 13: 2650, 14: 3650, 15: 4800, 16: 6150, 17: 7850, 18: 9850, close: 12950 } },
-            { id: 5, date: '2026-06-04', type: 'weekday', hourly: { 10: 800, 11: 1850, 13: 3150, 14: 4250, 15: 5650, 16: 7250, 17: 9350, 18: 11750, close: 15750 } },
-            { id: 6, date: '2026-06-05', type: 'friday', hourly: { 10: 950, 11: 2100, 13: 3800, 14: 5100, 15: 6800, 16: 8500, 17: 10800, 18: 13200, close: 16900 } },
-            { id: 7, date: '2026-06-08', type: 'weekday', hourly: { 10: 850, 11: 2000, 13: 3450, 14: 4650, 15: 6150, 16: 7900, 17: 10150, 18: 12750, close: 17100 } },
-            { id: 8, date: '2026-06-09', type: 'weekday', hourly: { 10: 680, 11: 1600, 13: 2800, 14: 3780, 15: 5060, 16: 6540, 17: 8420, 18: 10600, close: 14180 } },
-            { id: 9, date: '2026-06-10', type: 'weekday', hourly: { 10: 620, 11: 1530, 13: 2710, 14: 3670, 15: 4890, 16: 6310, 17: 8130, 18: 10250, close: 13650 } },
-            { id: 10, date: '2026-06-11', type: 'weekday', hourly: { 10: 740, 11: 1740, 13: 3020, 14: 4070, 15: 5420, 16: 6970, 17: 8970, 18: 11270, close: 15070 } },
-            { id: 11, date: '2026-06-12', type: 'friday', hourly: { 10: 1000, 11: 2300, 13: 3950, 14: 5300, 15: 7100, 16: 8900, 17: 11200, 18: 13800, close: 17500 } },
-            { id: 12, date: '2026-06-15', type: 'weekday', hourly: { 10: 820, 11: 1940, 13: 3360, 14: 4540, 15: 6020, 16: 7740, 17: 9960, 18: 12510, close: 16740 } }
-        ];
+        const DEFAULT_HISTORICAL_DATA = [];
 
         let historicalData = [];
         let todayData = {};
@@ -3650,11 +3644,12 @@
 
             const savedHistory = localStorage.getItem('hanwha_inbojang_historical_v4');
             const savedToday = localStorage.getItem('hanwha_inbojang_today_v4');
+            const savedTodayBackup = localStorage.getItem('hanwha_inbojang_today_backup_v4');
             const savedTarget = localStorage.getItem('hanwha_inbojang_target_v4');
             const savedMode = localStorage.getItem('hanwha_inbojang_mode_v4');
 
             historicalData = savedHistory ? JSON.parse(savedHistory) : DEFAULT_HISTORICAL_DATA;
-            todayData = savedToday ? JSON.parse(savedToday) : getEmptyDailyData();
+            todayData = savedToday ? JSON.parse(savedToday) : (savedTodayBackup ? JSON.parse(savedTodayBackup) : getEmptyDailyData());
             dailyTarget = savedTarget ? Number(savedTarget) : 22000;
 
             // 금일 요일 기반 최적 예측 필터 자동 감지 (금요일이면 friday, 그 외엔 weekday)
@@ -3691,6 +3686,9 @@
             normalizeDailyDataState();
             localStorage.setItem('hanwha_inbojang_historical_v4', JSON.stringify(historicalData));
             localStorage.setItem('hanwha_inbojang_today_v4', JSON.stringify(todayData));
+            if (hasAnyDailyInputData(todayData)) {
+                localStorage.setItem('hanwha_inbojang_today_backup_v4', JSON.stringify(todayData));
+            }
             localStorage.setItem('hanwha_inbojang_target_v4', dailyTarget.toString());
             localStorage.setItem('hanwha_inbojang_mode_v4', currentAnalysisMode);
             scheduleFirebaseSave('daily-storage');
@@ -4107,174 +4105,181 @@
             });
         }
 
+        function getDailyChartSlots() {
+            return SLOTS.filter(slot => slot.key === 'close' || (slot.minute === 0 && slot.hour !== 12));
+        }
+
+        function getDailyChartLabel(slot) {
+            if (!slot) return '';
+            if (slot.key === 'close') return '마감';
+            return `${slot.hour}시`;
+        }
+
         // 🆕 실시간 마감 전개 곡선 드로잉 함수
         function drawSVGChart(stats) {
             const svg = document.getElementById('chart-svg');
-            svg.innerHTML = ''; 
+            svg.innerHTML = '';
 
+            const chartSlots = getDailyChartSlots();
+            const chartKeys = chartSlots.map(slot => slot.key);
             const padding = { top: 35, right: 45, bottom: 45, left: 65 };
             const width = 750;
             const height = 350;
 
             const vals = [
-                ...Object.values(stats.avgCumulativeValues),
-                ...Object.values(stats.predictionTrendLine),
+                ...chartKeys.map(key => Number(stats.avgCumulativeValues[key] || 0)),
+                ...chartKeys.map(key => Number(stats.predictionTrendLine[key] || 0)),
                 dailyTarget
             ];
-            const maxVal = Math.max(...vals, 100) * 1.15; 
+            const maxVal = Math.max(...vals, 100) * 1.15;
 
-            const getX = (idx) => padding.left + (idx / (SLOT_KEYS.length - 1)) * (width - padding.left - padding.right);
+            const getX = (idx) => padding.left + (idx / Math.max(chartSlots.length - 1, 1)) * (width - padding.left - padding.right);
             const getY = (val) => height - padding.bottom - (val / maxVal) * (height - padding.top - padding.bottom);
 
             [0, 0.25, 0.5, 0.75, 1].forEach(ratio => {
                 const val = Math.round(maxVal * ratio);
                 const y = getY(val);
 
-                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                line.setAttribute("x1", padding.left);
-                line.setAttribute("y1", y);
-                line.setAttribute("x2", width - padding.right);
-                line.setAttribute("y2", y);
-                line.setAttribute("stroke", "#e2e8f0");
-                line.setAttribute("stroke-width", "0.7");
-                line.setAttribute("stroke-dasharray", "4 4");
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', padding.left);
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', width - padding.right);
+                line.setAttribute('y2', y);
+                line.setAttribute('stroke', '#e2e8f0');
+                line.setAttribute('stroke-width', '0.7');
+                line.setAttribute('stroke-dasharray', '4 4');
                 svg.appendChild(line);
 
-                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                text.setAttribute("x", padding.left - 10);
-                text.setAttribute("y", y + 4);
-                text.setAttribute("fill", "#64748b");
-                text.setAttribute("font-size", "9.5");
-                text.setAttribute("font-weight", "bold");
-                text.setAttribute("text-anchor", "end");
-                text.textContent = val.toLocaleString() + "천";
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', padding.left - 10);
+                text.setAttribute('y', y + 4);
+                text.setAttribute('fill', '#64748b');
+                text.setAttribute('font-size', '9.5');
+                text.setAttribute('font-weight', 'bold');
+                text.setAttribute('text-anchor', 'end');
+                text.textContent = val.toLocaleString() + '천';
                 svg.appendChild(text);
             });
 
-            SLOT_KEYS.forEach((key, idx) => {
+            chartSlots.forEach((slot, idx) => {
                 const x = getX(idx);
-                const label = SLOTS[idx].label.replace('오전 ', '').replace('오후 ', '').replace(' 누적', '');
+                const label = getDailyChartLabel(slot);
 
-                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                line.setAttribute("x1", x);
-                line.setAttribute("y1", padding.top);
-                line.setAttribute("x2", x);
-                line.setAttribute("y2", height - padding.bottom);
-                line.setAttribute("stroke", "#e2e8f0");
-                line.setAttribute("stroke-width", "1");
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x);
+                line.setAttribute('y1', padding.top);
+                line.setAttribute('x2', x);
+                line.setAttribute('y2', height - padding.bottom);
+                line.setAttribute('stroke', '#e2e8f0');
+                line.setAttribute('stroke-width', idx === 0 || idx === chartSlots.length - 1 ? '1' : '0.8');
                 svg.appendChild(line);
 
-                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                text.setAttribute("x", x);
-                text.setAttribute("y", height - padding.bottom + 18);
-                text.setAttribute("fill", "#475569");
-                text.setAttribute("font-size", "9.5");
-                text.setAttribute("font-weight", "bold");
-                text.setAttribute("text-anchor", "middle");
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', x);
+                text.setAttribute('y', height - padding.bottom + 18);
+                text.setAttribute('fill', '#475569');
+                text.setAttribute('font-size', '9.5');
+                text.setAttribute('font-weight', 'bold');
+                text.setAttribute('text-anchor', 'middle');
                 text.textContent = label;
                 svg.appendChild(text);
             });
 
             const targetY = getY(dailyTarget);
-            const targetLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            targetLine.setAttribute("x1", padding.left);
-            targetLine.setAttribute("y1", targetY);
-            targetLine.setAttribute("x2", width - padding.right);
-            targetLine.setAttribute("y2", targetY);
-            targetLine.setAttribute("stroke", "var(--rose)");
-            targetLine.setAttribute("stroke-width", "1.5");
-            targetLine.setAttribute("stroke-dasharray", "3 3");
+            const targetLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            targetLine.setAttribute('x1', padding.left);
+            targetLine.setAttribute('y1', targetY);
+            targetLine.setAttribute('x2', width - padding.right);
+            targetLine.setAttribute('y2', targetY);
+            targetLine.setAttribute('stroke', 'var(--rose)');
+            targetLine.setAttribute('stroke-width', '1.5');
+            targetLine.setAttribute('stroke-dasharray', '3 3');
             svg.appendChild(targetLine);
 
-            const targetText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            targetText.setAttribute("x", width - padding.right);
-            targetText.setAttribute("y", targetY - 6);
-            targetText.setAttribute("fill", "var(--rose)");
-            targetText.setAttribute("font-size", "9.5");
-            targetText.setAttribute("font-weight", "900");
-            targetText.setAttribute("text-anchor", "end");
+            const targetText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            targetText.setAttribute('x', width - padding.right);
+            targetText.setAttribute('y', targetY - 6);
+            targetText.setAttribute('fill', 'var(--rose)');
+            targetText.setAttribute('font-size', '9.5');
+            targetText.setAttribute('font-weight', '900');
+            targetText.setAttribute('text-anchor', 'end');
             targetText.textContent = `지점목표: ${dailyTarget.toLocaleString()}천`;
             svg.appendChild(targetText);
 
-            let avgPoints = [];
-            SLOT_KEYS.forEach((key, idx) => {
-                avgPoints.push(`${getX(idx)},${getY(stats.avgCumulativeValues[key])}`);
-            });
-            const avgPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            avgPath.setAttribute("d", `M ${avgPoints.join(' L ')}`);
-            avgPath.setAttribute("fill", "none");
-            avgPath.setAttribute("stroke", "#94a3b8");
-            avgPath.setAttribute("stroke-width", "2");
-            avgPath.setAttribute("opacity", "0.65");
+            const buildPoints = (sourceMap) => chartKeys.map((key, idx) => `${getX(idx)},${getY(Number(sourceMap[key] || 0))}`);
+
+            const avgPoints = buildPoints(stats.avgCumulativeValues);
+            const avgPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            avgPath.setAttribute('d', `M ${avgPoints.join(' L ')}`);
+            avgPath.setAttribute('fill', 'none');
+            avgPath.setAttribute('stroke', '#94a3b8');
+            avgPath.setAttribute('stroke-width', '2');
+            avgPath.setAttribute('opacity', '0.65');
             svg.appendChild(avgPath);
 
             if (stats.activeKeys.length > 0) {
-                let predPoints = [];
-                SLOT_KEYS.forEach((key, idx) => {
-                    predPoints.push(`${getX(idx)},${getY(stats.predictionTrendLine[key])}`);
-                });
-                const predPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                predPath.setAttribute("d", `M ${predPoints.join(' L ')}`);
-                predPath.setAttribute("fill", "none");
-                predPath.setAttribute("stroke", "var(--hanwha-orange)");
-                predPath.setAttribute("stroke-width", "2");
-                predPath.setAttribute("stroke-dasharray", "4 4");
+                const predPoints = buildPoints(stats.predictionTrendLine);
+                const predPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                predPath.setAttribute('d', `M ${predPoints.join(' L ')}`);
+                predPath.setAttribute('fill', 'none');
+                predPath.setAttribute('stroke', 'var(--hanwha-orange)');
+                predPath.setAttribute('stroke-width', '2');
+                predPath.setAttribute('stroke-dasharray', '4 4');
                 svg.appendChild(predPath);
             }
 
             if (stats.activeKeys.length > 0) {
-                let actualPoints = [];
-                SLOT_KEYS.forEach((key, idx) => {
-                    const val = stats.todayCumulativeList[key];
-                    if (val !== null) {
-                        actualPoints.push(`${getX(idx)},${getY(val)}`);
-                    }
-                });
+                const actualPoints = chartKeys
+                    .filter(key => stats.todayCumulativeList[key] !== null)
+                    .map((key) => {
+                        const chartIndex = chartKeys.indexOf(key);
+                        return `${getX(chartIndex)},${getY(stats.todayCumulativeList[key])}`;
+                    });
                 if (actualPoints.length > 0) {
-                    const actPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    actPath.setAttribute("d", `M ${actualPoints.join(' L ')}`);
-                    actPath.setAttribute("fill", "none");
-                    actPath.setAttribute("stroke", "var(--emerald)");
-                    actPath.setAttribute("stroke-width", "4");
-                    actPath.setAttribute("stroke-linecap", "round");
-                    actPath.setAttribute("stroke-linejoin", "round");
+                    const actPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    actPath.setAttribute('d', `M ${actualPoints.join(' L ')}`);
+                    actPath.setAttribute('fill', 'none');
+                    actPath.setAttribute('stroke', 'var(--emerald)');
+                    actPath.setAttribute('stroke-width', '4');
+                    actPath.setAttribute('stroke-linecap', 'round');
+                    actPath.setAttribute('stroke-linejoin', 'round');
                     svg.appendChild(actPath);
                 }
             }
 
-            SLOT_KEYS.forEach((key, idx) => {
+            chartKeys.forEach((key, idx) => {
                 const hasInput = stats.todayInputs[key] !== null;
                 const x = getX(idx);
                 const cumVal = hasInput ? stats.todayCumulativeList[key] : stats.predictionTrendLine[key];
                 const y = getY(cumVal);
 
-                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                circle.setAttribute("cx", x);
-                circle.setAttribute("cy", y);
-                circle.setAttribute("r", hasInput ? "5" : "3.5");
-                circle.setAttribute("fill", hasInput ? "var(--emerald)" : "var(--hanwha-orange)");
-                circle.setAttribute("stroke", "#ffffff");
-                circle.setAttribute("stroke-width", "2");
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', x);
+                circle.setAttribute('cy', y);
+                circle.setAttribute('r', hasInput ? '5' : '3.5');
+                circle.setAttribute('fill', hasInput ? 'var(--emerald)' : 'var(--hanwha-orange)');
+                circle.setAttribute('stroke', '#ffffff');
+                circle.setAttribute('stroke-width', '2');
                 svg.appendChild(circle);
 
-                if (idx === SLOT_KEYS.length - 1) {
-                    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-                    rect.setAttribute("x", x - 72);
-                    rect.setAttribute("y", y - 26);
-                    rect.setAttribute("width", "66");
-                    rect.setAttribute("height", "18");
-                    rect.setAttribute("rx", "4");
-                    rect.setAttribute("fill", "var(--hanwha-orange)");
+                if (idx === chartKeys.length - 1) {
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', x - 72);
+                    rect.setAttribute('y', y - 26);
+                    rect.setAttribute('width', '66');
+                    rect.setAttribute('height', '18');
+                    rect.setAttribute('rx', '4');
+                    rect.setAttribute('fill', 'var(--hanwha-orange)');
                     svg.appendChild(rect);
 
-                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                    text.setAttribute("x", x - 39);
-                    text.setAttribute("y", y - 14);
-                    text.setAttribute("fill", "#ffffff");
-                    text.setAttribute("font-size", "9");
-                    text.setAttribute("font-weight", "900");
-                    text.setAttribute("text-anchor", "middle");
-                    text.textContent = Math.round(cumVal).toLocaleString() + "천";
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', x - 39);
+                    text.setAttribute('y', y - 14);
+                    text.setAttribute('fill', '#ffffff');
+                    text.setAttribute('font-size', '9');
+                    text.setAttribute('font-weight', '900');
+                    text.setAttribute('text-anchor', 'middle');
+                    text.textContent = Math.round(cumVal).toLocaleString() + '천';
                     svg.appendChild(text);
                 }
             });
@@ -4614,9 +4619,10 @@
         }
 
         function resetToDefault() {
-            const confirmMsg = '한화손해보험 요일별/마감일별 정합 특화 샘플 데이터셋으로 복원하시겠습니까?\n기존 입력 상태는 소실됩니다.';
+            const confirmMsg = '한화손해보험 데이터 초기화 복원(샘플 데이터 없이) 하시겠습니까?\n기존 입력 상태는 소실됩니다.';
             showConfirm('샘플 복원', confirmMsg, function() {
-                historicalData = DEFAULT_HISTORICAL_DATA;
+                historicalData = [];
+                localStorage.removeItem('hanwha_inbojang_today_backup_v4');
                 todayData = getEmptyDailyData();
                 dailyTarget = 22000;
                 
@@ -5155,11 +5161,7 @@
             return { id, month, workdays, daily, dateMap };
         }
 
-        const DEFAULT_MONTHLY_HISTORICAL_DATA = [
-            makeMonthlySampleRow(101, '2026-03', 22, 326000, 1.18),
-            makeMonthlySampleRow(102, '2026-04', 22, 342500, 1.22),
-            makeMonthlySampleRow(103, '2026-05', 21, 358000, 1.28)
-        ];
+        const DEFAULT_MONTHLY_HISTORICAL_DATA = [];
 
         function initMonthlyForecastModule() {
             const savedMonthlyHistory = localStorage.getItem('hanwha_inbojang_monthly_historical_v1');
@@ -6168,16 +6170,17 @@
         };
 
         resetToDefault = function() {
-            const confirmMsg = '한화손해보험 요일별/마감일별 샘플과 월마감 예측 샘플 데이터셋으로 복원하시겠습니까?\n기존 입력 상태는 소실됩니다.';
+            const confirmMsg = '한화손해보험 데이터 초기화 복원(샘플 데이터 없이) 하시겠습니까?\n기존 입력 상태는 소실됩니다.';
             showConfirm('샘플 복원', confirmMsg, function() {
-                historicalData = DEFAULT_HISTORICAL_DATA;
+                historicalData = [];
+                localStorage.removeItem('hanwha_inbojang_today_backup_v4');
                 todayData = getEmptyDailyData();
                 dailyTarget = 22000;
 
                 const todayDay = new Date().getDay();
                 currentAnalysisMode = todayDay === 5 ? 'friday' : 'weekday';
 
-                monthlyHistoricalData = DEFAULT_MONTHLY_HISTORICAL_DATA;
+                monthlyHistoricalData = [];
                 currentMonthData = emptyMonthlyData();
                 monthlyTarget = 350000;
                 monthlyBusinessDays = 22;
@@ -6895,16 +6898,17 @@
         };
 
         resetToDefault = function() {
-            const confirmMsg = '한화손해보험 요일별/마감일별 샘플과 월마감 예측 샘플 데이터셋으로 복원하시겠습니까?\n기존 입력 상태는 소실됩니다.';
+            const confirmMsg = '한화손해보험 데이터 초기화 복원(샘플 데이터 없이) 하시겠습니까?\n기존 입력 상태는 소실됩니다.';
             showConfirm('샘플 복원', confirmMsg, function() {
-                historicalData = DEFAULT_HISTORICAL_DATA;
+                historicalData = [];
+                localStorage.removeItem('hanwha_inbojang_today_backup_v4');
                 todayData = getEmptyDailyData();
                 dailyTarget = 22000;
 
                 const todayDay = new Date().getDay();
                 currentAnalysisMode = todayDay === 5 ? 'friday' : 'weekday';
 
-                monthlyHistoricalData = DEFAULT_MONTHLY_HISTORICAL_DATA;
+                monthlyHistoricalData = [];
                 currentMonthData = emptyMonthlyData();
                 monthlyTarget = 350000;
                 monthlyBusinessDays = 22;
